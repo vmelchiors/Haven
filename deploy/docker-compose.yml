@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - haven-web
+      - haven-backend
+      - livekit
+
+  haven-web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        - VITE_GITHUB_RELEASE_URL=${VITE_GITHUB_RELEASE_URL:-https://github.com/SEU_USUARIO/Haven/releases/latest}
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+
+  haven-backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - DB_PATH=/data/haven.db
+      - RECEIPTS_PATH=/data/receipts
+      - PIX_KEY=${PIX_KEY:-sua-chave-pix-aqui@dominio.com}
+      - PIX_RECEIVER_NAME=${PIX_RECEIVER_NAME:-Haven Project}
+      - PIX_RECEIVER_CITY=${PIX_RECEIVER_CITY:-Manaus}
+      - JWT_SECRET=${JWT_SECRET:-haven_jwt_secret_dev_key_super_secure}
+      - LIVEKIT_URL=${LIVEKIT_URL:-/rtc}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-haven_key}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-haven_secret_change_me}
+      - TOS_CURRENT_VERSION=v1.0.0
+      - UPLOAD_DIR=/data/uploads
+    volumes:
+      - haven_data:/data
+    ports:
+      - "8080:8080"
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    environment:
+      - LIVEKIT_KEYS=${LIVEKIT_API_KEY:-haven_key}:${LIVEKIT_API_SECRET:-haven_secret_change_me}
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50050:50000-50050/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+
+volumes:
+  caddy_data:
+  caddy_config:
+  haven_data:
+

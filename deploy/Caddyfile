@@ -1,0 +1,63 @@
+{$DOMAIN::80} {
+    # LiveKit SFU (WebRTC Signaling, Token Validation & Twirp RPC)
+    handle /rtc {
+        reverse_proxy livekit:7880
+    }
+    handle /rtc/* {
+        reverse_proxy livekit:7880
+    }
+    handle /twirp/* {
+        reverse_proxy livekit:7880
+    }
+    handle /livekit/* {
+        reverse_proxy livekit:7880
+    }
+
+    # Haven Core API & Static Uploads
+    handle /api/* {
+        reverse_proxy haven-backend:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    handle /uploads/* {
+        reverse_proxy haven-backend:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # WebSockets Gateway (Chat & Voice Presence)
+    handle /ws {
+        reverse_proxy haven-backend:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    handle /ws/* {
+        reverse_proxy haven-backend:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Haven Web SPA Frontend
+    handle {
+        reverse_proxy haven-web:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}
+
