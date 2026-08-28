@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions and capabilities for Haven desktop app",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:default",
+    "global-shortcut:default"
+  ]
+}
