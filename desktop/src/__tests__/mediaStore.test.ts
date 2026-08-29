@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useMediaStore } from '../stores/mediaStore';
 
 describe('MediaStore', () => {
@@ -83,6 +83,7 @@ describe('MediaStore', () => {
   });
 
   it('should clean up participants and reset focus when user leaves voice', () => {
+    vi.useFakeTimers();
     useMediaStore.setState({
       activeVoiceChannel: { id: 'ch_1', name: 'General', type: 'VOICE', community_id: 'c_1', position: 0 },
       voiceChannelMembers: {
@@ -100,6 +101,10 @@ describe('MediaStore', () => {
 
     useMediaStore.getState().setUserLeftVoice('ch_1', 'user_b');
 
+    expect(useMediaStore.getState().participantTransitions['user_b']).toBe('leaving');
+    expect(useMediaStore.getState().participants['user_b']).toBeDefined();
+
+    vi.advanceTimersByTime(240);
     expect(useMediaStore.getState().participants['user_b']).toBeUndefined();
     expect(useMediaStore.getState().focusedParticipant).toBeNull();
     expect(useMediaStore.getState().voiceChannelMembers['ch_1'].some((u) => u.user_id === 'user_b')).toBe(false);
@@ -111,5 +116,8 @@ describe('MediaStore', () => {
     });
 
     expect(useMediaStore.getState().participants['user_b']).toBeUndefined();
+    vi.useRealTimers();
   });
 });
+
+

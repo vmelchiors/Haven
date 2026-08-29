@@ -24,6 +24,7 @@ export const ControlBar: React.FC = () => {
   const isNoiseSuppressionEnabled = useMediaStore((s) => s.isNoiseSuppressionEnabled);
   const vadLevel = useMediaStore((s) => s.vadLevel);
   const isSpeaking = useMediaStore((s) => s.isSpeaking);
+  const isVoiceConnected = useMediaStore((s) => s.isVoiceConnected);
 
   const toggleMute = useMediaStore((s) => s.toggleMute);
   const toggleDeafen = useMediaStore((s) => s.toggleDeafen);
@@ -36,7 +37,7 @@ export const ControlBar: React.FC = () => {
   const vadThreshold = useSettingsStore((s) => s.vadThreshold);
 
   return (
-    <div className="h-18 bg-haven-darker border-t border-haven-border px-6 flex flex-col justify-center items-center gap-1.5 flex-shrink-0 z-20">
+    <div className="min-h-[92px] bg-haven-darker border-t border-haven-border px-6 py-3 flex flex-col justify-center items-center gap-2.5 flex-shrink-0 z-20">
       {/* Audio Activity Bar */}
       <div className="w-56 max-w-full">
         <AudioMeter level={vadLevel} threshold={vadThreshold} />
@@ -75,7 +76,8 @@ export const ControlBar: React.FC = () => {
         {/* Camera Toggle */}
         <button
           onClick={toggleCamera}
-          className={`p-2.5 rounded-full transition-all duration-150 cursor-pointer flex items-center justify-center border ${
+          disabled={!isVoiceConnected}
+          className={`p-2.5 rounded-full transition-all duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center border ${
             isCameraOn
               ? 'bg-haven-accent text-white border-indigo-400/30'
               : 'bg-haven-surface hover:bg-haven-surface-hover text-zinc-300 hover:text-white border-haven-border'
@@ -88,7 +90,8 @@ export const ControlBar: React.FC = () => {
         {/* Screen Share */}
         <button
           onClick={toggleScreenShare}
-          className={`p-2.5 rounded-full transition-all duration-150 cursor-pointer flex items-center justify-center border ${
+          disabled={!isVoiceConnected}
+          className={`p-2.5 rounded-full transition-all duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center border ${
             isScreenSharing
               ? 'bg-haven-cyan text-white border-cyan-400/30'
               : 'bg-haven-surface hover:bg-haven-surface-hover text-zinc-300 hover:text-white border-haven-border'

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   caddy:
     image: caddy:2-alpine
@@ -41,9 +39,10 @@ services:
       - PIX_RECEIVER_NAME=${PIX_RECEIVER_NAME:-Haven Project}
       - PIX_RECEIVER_CITY=${PIX_RECEIVER_CITY:-Manaus}
       - JWT_SECRET=${JWT_SECRET:-haven_jwt_secret_dev_key_super_secure}
-      - LIVEKIT_URL=${LIVEKIT_URL:-/rtc}
+      # The SDK appends /rtc/v1 itself; use the site root as its public base URL.
+      - LIVEKIT_URL=${LIVEKIT_URL:-/}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-haven_key}
-      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-haven_secret_change_me}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-haven_secret_change_me_use_32_chars_minimum}
       - TOS_CURRENT_VERSION=v1.0.0
       - UPLOAD_DIR=/data/uploads
     volumes:
@@ -56,7 +55,7 @@ services:
     restart: unless-stopped
     command: --config /etc/livekit.yaml
     environment:
-      - LIVEKIT_KEYS=${LIVEKIT_API_KEY:-haven_key}:${LIVEKIT_API_SECRET:-haven_secret_change_me}
+      - "LIVEKIT_KEYS=${LIVEKIT_API_KEY:-haven_key}: ${LIVEKIT_API_SECRET:-haven_secret_change_me_use_32_chars_minimum}"
     ports:
       - "7880:7880"
       - "7881:7881"
