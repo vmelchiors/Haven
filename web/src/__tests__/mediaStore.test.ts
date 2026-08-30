@@ -11,6 +11,7 @@ describe('MediaStore', () => {
       isCameraOn: false,
       isScreenSharing: false,
       isNoiseSuppressionEnabled: true,
+      noiseSuppressionStatus: 'idle',
       isSpeaking: false,
       vadLevel: 0,
       participants: {},
@@ -27,10 +28,17 @@ describe('MediaStore', () => {
     expect(useMediaStore.getState().isMuted).toBe(true); // Deafen also mutes mic
   });
 
-  it('should toggle RNNoise noise suppression', () => {
+  it('should toggle DTLN AI noise suppression and its lifecycle status', () => {
     expect(useMediaStore.getState().isNoiseSuppressionEnabled).toBe(true);
     useMediaStore.getState().toggleNoiseSuppression();
     expect(useMediaStore.getState().isNoiseSuppressionEnabled).toBe(false);
+    expect(useMediaStore.getState().noiseSuppressionStatus).toBe('disabled');
+
+    useMediaStore.getState().toggleNoiseSuppression();
+    expect(useMediaStore.getState().noiseSuppressionStatus).toBe('idle');
+
+    useMediaStore.getState().setNoiseSuppressionStatus('active');
+    expect(useMediaStore.getState().noiseSuppressionStatus).toBe('active');
   });
 
   it('should add and update remote voice participants', () => {
