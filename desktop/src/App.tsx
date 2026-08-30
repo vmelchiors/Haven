@@ -106,7 +106,7 @@ export const App: React.FC = () => {
             </div>
             <h3 className="text-base font-semibold text-zinc-100 tracking-tight">Haven</h3>
             <p className="text-xs text-zinc-400 mt-1 max-w-sm leading-relaxed font-normal">
-              Comunicação em tempo real, cancelamento neural de ruído RNNoise e arquitetura Zero-PII por design.
+              Comunicação em tempo real, foco de voz neural DTLN e arquitetura Zero-PII por design.
             </p>
 
             <div className="flex items-center gap-2 mt-5 flex-wrap justify-center">
