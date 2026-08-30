@@ -21,6 +21,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
   const voiceChannelMembers = useMediaStore((s) => s.voiceChannelMembers);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const focusedParticipant = useMediaStore((s) => s.focusedParticipant);
+  const participantTransitions = useMediaStore((s) => s.participantTransitions);
   const setFocusedParticipant = useMediaStore((s) => s.setFocusedParticipant);
 
   // Strictly filter participants to only active channel members + current user
@@ -111,7 +112,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
               if (!participant) return null;
 
               return (
-                <div key={stream.id} className="w-full h-full min-h-0 flex items-center justify-center">
+                <div key={stream.id} className={`w-full h-full min-h-0 flex items-center justify-center transition-all duration-200 ${participantTransitions[participant.identity] === 'leaving' ? 'opacity-0 scale-95' : 'animate-scale-up'}`}>
                   <VideoTile
                     participant={participant}
                     isScreenShare={stream.isScreenShare}
@@ -139,7 +140,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
             return (
               <div
                 key={p.identity}
-                className="h-full w-40 md:w-48 flex-shrink-0 cursor-pointer"
+                className={`h-full w-40 md:w-48 flex-shrink-0 cursor-pointer transition-all duration-200 ${participantTransitions[p.identity] === 'leaving' ? 'opacity-0 scale-95' : participantTransitions[p.identity] === 'entering' ? 'animate-scale-up' : ''}`}
                 onClick={() => {
                   setFocusedParticipant(isCurrentlyFocused ? null : p.identity);
                 }}
@@ -179,7 +180,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
         )}`}
       >
         {participants.map((p) => (
-          <div key={p.identity} className="w-full h-full min-h-[160px] aspect-video">
+          <div key={p.identity} className={`w-full h-full min-h-[160px] aspect-video transition-all duration-200 ${participantTransitions[p.identity] === 'leaving' ? 'opacity-0 scale-95' : participantTransitions[p.identity] === 'entering' ? 'animate-scale-up' : ''}`}>
             <VideoTile
               participant={p}
               isScreenShare={p.isScreenSharing}
@@ -193,3 +194,5 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
     </div>
   );
 };
+
+

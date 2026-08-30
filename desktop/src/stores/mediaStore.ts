@@ -12,6 +12,8 @@ interface MediaState {
   participants: Record<string, VoiceParticipant>;
 
   isVoiceConnected: boolean;
+  voiceConnectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
+  participantTransitions: Record<string, 'entering' | 'leaving'>;
   isMuted: boolean;
   isDeafened: boolean;
   isCameraOn: boolean;
@@ -56,6 +58,8 @@ export const useMediaStore = create<MediaState>((set) => ({
   voiceChannelMembers: {},
 
   isVoiceConnected: false,
+  voiceConnectionState: 'disconnected',
+  participantTransitions: {},
   isMuted: false,
   isDeafened: false,
   isCameraOn: false,
@@ -67,16 +71,32 @@ export const useMediaStore = create<MediaState>((set) => ({
   focusedParticipant: null,
 
   setVoiceSnapshot: (snapshot) => {
+    const snapshotUserIds = snapshot.map((voiceUser) => voiceUser.user_id);
     set((state) => {
-      const map: Record<string, VoiceChannelUser[]> = { ...state.voiceChannelMembers };
-      for (const u of snapshot) {
-        if (!map[u.channel_id]) {
-          map[u.channel_id] = [];
+      const map: Record<string, VoiceChannelUser[]> = {};
+      for (const voiceUser of snapshot) {
+        if (!map[voiceUser.channel_id]) {
+          map[voiceUser.channel_id] = [];
         }
-        map[u.channel_id] = map[u.channel_id].filter((existing) => existing.user_id !== u.user_id);
-        map[u.channel_id].push(u);
+        map[voiceUser.channel_id] = map[voiceUser.channel_id].filter(
+          (existing) => existing.user_id !== voiceUser.user_id,
+        );
+        map[voiceUser.channel_id].push(voiceUser);
       }
-      return { voiceChannelMembers: map };
+      const knownUserIds = new Set(Object.values(state.voiceChannelMembers).flat().map((voiceUser) => voiceUser.user_id));
+      const transitions = { ...state.participantTransitions };
+      snapshotUserIds.forEach((userId) => {
+        if (!knownUserIds.has(userId)) transitions[userId] = 'entering';
+      });
+      return { voiceChannelMembers: map, participantTransitions: transitions };
+    });
+    snapshotUserIds.forEach((userId) => {
+      window.setTimeout(() => set((state) => {
+        if (state.participantTransitions[userId] !== 'entering') return state;
+        const transitions = { ...state.participantTransitions };
+        delete transitions[userId];
+        return { participantTransitions: transitions };
+      }), 320);
     });
   },
 
@@ -107,16 +127,32 @@ export const useMediaStore = create<MediaState>((set) => ({
           [user.channel_id]: [...filtered, user],
         },
         participants: newParticipants,
+        participantTransitions: {
+          ...state.participantTransitions,
+          [user.user_id]: 'entering',
+        },
       };
     });
+    window.setTimeout(() => set((state) => {
+      if (state.participantTransitions[user.user_id] !== 'entering') return state;
+      const next = { ...state.participantTransitions };
+      delete next[user.user_id];
+      return { participantTransitions: next };
+    }), 320);
   },
 
   setUserLeftVoice: (channelId, userId) => {
+    set((state) => ({
+      participantTransitions: { ...state.participantTransitions, [userId]: 'leaving' },
+    }));
+    window.setTimeout(() => {
     set((state) => {
       const existing = state.voiceChannelMembers[channelId] || [];
       const filtered = existing.filter((u) => u.user_id !== userId);
       const newParticipants = { ...state.participants };
       delete newParticipants[userId];
+      const nextTransitions = { ...state.participantTransitions };
+      delete nextTransitions[userId];
 
       return {
         voiceChannelMembers: {
@@ -125,14 +161,19 @@ export const useMediaStore = create<MediaState>((set) => ({
         },
         participants: newParticipants,
         focusedParticipant: state.focusedParticipant === userId ? null : state.focusedParticipant,
+        participantTransitions: nextTransitions,
       };
     });
+    }, 240);
   },
 
   setVoiceStateUpdate: (user) => {
     set((state) => {
       const existing = state.voiceChannelMembers[user.channel_id] || [];
-      const updated = existing.map((u) => (u.user_id === user.user_id ? { ...u, ...user } : u));
+      const hasUser = existing.some((u) => u.user_id === user.user_id);
+      const updated = hasUser
+        ? existing.map((u) => (u.user_id === user.user_id ? { ...u, ...user } : u))
+        : [...existing, user];
       const newParticipants = { ...state.participants };
       if (state.activeVoiceChannel?.id === user.channel_id && newParticipants[user.user_id]) {
         const p = newParticipants[user.user_id];
@@ -164,6 +205,14 @@ export const useMediaStore = create<MediaState>((set) => ({
   connectVoice: (channel, token, url, roomName) => {
     const currentUser = useAuthStore.getState().user;
     const state = useMediaStore.getState();
+
+    if (state.activeVoiceChannel && state.activeVoiceChannel.id !== channel.id && currentUser) {
+      sendWebSocketMessage({
+        type: 'user_left_voice',
+        channel_id: state.activeVoiceChannel.id,
+        payload: { channel_id: state.activeVoiceChannel.id, user_id: currentUser.id },
+      });
+    }
 
     if (currentUser) {
       sendWebSocketMessage({
@@ -205,12 +254,14 @@ export const useMediaStore = create<MediaState>((set) => ({
         rtcToken: token || s.rtcToken,
         rtcUrl: url || s.rtcUrl,
         roomName: roomName || s.roomName,
-        isVoiceConnected: true,
+        isVoiceConnected: false,
+        voiceConnectionState: 'connecting',
         voiceChannelMembers: {
           ...s.voiceChannelMembers,
           [channel.id]: userList,
         },
         participants: s.activeVoiceChannel?.id === channel.id ? s.participants : {},
+        participantTransitions: {},
       };
     });
   },
@@ -243,11 +294,13 @@ export const useMediaStore = create<MediaState>((set) => ({
         rtcUrl: null,
         roomName: null,
         isVoiceConnected: false,
+        voiceConnectionState: 'disconnected',
         participants: {},
         voiceChannelMembers: newMembers,
         isCameraOn: false,
         isScreenSharing: false,
         focusedParticipant: null,
+        participantTransitions: {},
       };
     });
   },
@@ -503,3 +556,5 @@ export const useMediaStore = create<MediaState>((set) => ({
 
   resetParticipants: () => set({ participants: {} }),
 }));
+
+

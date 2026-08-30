@@ -5,13 +5,11 @@ rtc:
   tcp_port: 7881
   port_range_start: 50000
   port_range_end: 50050
+  # Production: discover and advertise the server's public address.
+  # Prefer host networking and configure TURN for restrictive networks.
   use_external_ip: true
 # As chaves de API são injetadas via variável de ambiente LIVEKIT_KEYS pelo docker-compose.
 # Não defina chaves aqui para evitar inconsistência com o .env.
 logging:
   level: info
-webhook:
-  api_key: ${LIVEKIT_API_KEY}
-  urls:
-    - http://haven-backend:8080/api/livekit/webhook
 
