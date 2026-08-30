@@ -3,6 +3,8 @@ import { Channel, VoiceParticipant, VoiceChannelUser } from '../types';
 import { useAuthStore } from './authStore';
 import { sendWebSocketMessage } from '../hooks/useWebSocket';
 
+export type NoiseSuppressionStatus = 'idle' | 'loading' | 'active' | 'fallback' | 'disabled';
+
 interface MediaState {
   activeChannel: Channel | null;
   activeVoiceChannel: Channel | null;
@@ -17,6 +19,7 @@ interface MediaState {
   isCameraOn: boolean;
   isScreenSharing: boolean;
   isNoiseSuppressionEnabled: boolean;
+  noiseSuppressionStatus: NoiseSuppressionStatus;
   isPushToTalkActive: boolean;
   vadLevel: number;
   isSpeaking: boolean;
@@ -29,6 +32,7 @@ interface MediaState {
   toggleCamera: () => void;
   toggleScreenShare: () => void;
   toggleNoiseSuppression: () => void;
+  setNoiseSuppressionStatus: (status: NoiseSuppressionStatus) => void;
   voiceChannelMembers: Record<string, VoiceChannelUser[]>;
   setVoiceSnapshot: (snapshot: VoiceChannelUser[]) => void;
   setUserJoinedVoice: (user: VoiceChannelUser) => void;
@@ -61,6 +65,7 @@ export const useMediaStore = create<MediaState>((set) => ({
   isCameraOn: false,
   isScreenSharing: false,
   isNoiseSuppressionEnabled: true,
+  noiseSuppressionStatus: 'idle',
   isPushToTalkActive: false,
   vadLevel: 0,
   isSpeaking: false,
@@ -350,7 +355,14 @@ export const useMediaStore = create<MediaState>((set) => ({
   },
 
   toggleNoiseSuppression: () =>
-    set((state) => ({ isNoiseSuppressionEnabled: !state.isNoiseSuppressionEnabled })),
+    set((state) => {
+      const enabled = !state.isNoiseSuppressionEnabled;
+      return {
+        isNoiseSuppressionEnabled: enabled,
+        noiseSuppressionStatus: enabled ? 'idle' : 'disabled',
+      };
+    }),
+  setNoiseSuppressionStatus: (status) => set({ noiseSuppressionStatus: status }),
   setPushToTalkActive: (active) => set({ isPushToTalkActive: active }),
   setVadLevel: (level, isSpeaking) =>
     set((state) => {
