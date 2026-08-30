@@ -5,10 +5,9 @@ rtc:
   tcp_port: 7881
   port_range_start: 50000
   port_range_end: 50050
-  # Local Docker Desktop: advertise the host loopback ports published by Compose.
-  # Production must replace node_ip with the server's reachable IP (or use host networking).
-  use_external_ip: false
-  node_ip: 127.0.0.1
+  # Production: discover and advertise the server's public address.
+  # Prefer host networking and configure TURN for restrictive networks.
+  use_external_ip: true
 # As chaves de API são injetadas via variável de ambiente LIVEKIT_KEYS pelo docker-compose.
 # Não defina chaves aqui para evitar inconsistência com o .env.
 logging:

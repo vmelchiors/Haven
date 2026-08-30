@@ -118,4 +118,22 @@ describe('MediaStore', () => {
     expect(useMediaStore.getState().participants['user_b']).toBeUndefined();
     vi.useRealTimers();
   });
+
+  it('should replace voice snapshots and clear each entrance transition safely', () => {
+    vi.useFakeTimers();
+    useMediaStore.setState({ voiceChannelMembers: {}, participantTransitions: {} });
+
+    useMediaStore.getState().setVoiceSnapshot([
+      { channel_id: 'ch_1', user_id: 'user_a', username: 'User A', is_muted: false, is_deafened: false, is_speaking: false, is_camera_on: false, is_screen_sharing: false },
+      { channel_id: 'ch_2', user_id: 'user_b', username: 'User B', is_muted: false, is_deafened: false, is_speaking: false, is_camera_on: false, is_screen_sharing: false },
+    ]);
+
+    expect(useMediaStore.getState().voiceChannelMembers.ch_1[0].user_id).toBe('user_a');
+    expect(useMediaStore.getState().voiceChannelMembers.ch_2[0].user_id).toBe('user_b');
+    expect(useMediaStore.getState().participantTransitions).toEqual({ user_a: 'entering', user_b: 'entering' });
+
+    vi.advanceTimersByTime(320);
+    expect(useMediaStore.getState().participantTransitions).toEqual({});
+    vi.useRealTimers();
+  });
 });

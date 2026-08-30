@@ -71,16 +71,32 @@ export const useMediaStore = create<MediaState>((set) => ({
   focusedParticipant: null,
 
   setVoiceSnapshot: (snapshot) => {
-    set(() => {
+    const snapshotUserIds = snapshot.map((voiceUser) => voiceUser.user_id);
+    set((state) => {
       const map: Record<string, VoiceChannelUser[]> = {};
-      for (const u of snapshot) {
-        if (!map[u.channel_id]) {
-          map[u.channel_id] = [];
+      for (const voiceUser of snapshot) {
+        if (!map[voiceUser.channel_id]) {
+          map[voiceUser.channel_id] = [];
         }
-        map[u.channel_id] = map[u.channel_id].filter((existing) => existing.user_id !== u.user_id);
-        map[u.channel_id].push(u);
+        map[voiceUser.channel_id] = map[voiceUser.channel_id].filter(
+          (existing) => existing.user_id !== voiceUser.user_id,
+        );
+        map[voiceUser.channel_id].push(voiceUser);
       }
-      return { voiceChannelMembers: map };
+      const knownUserIds = new Set(Object.values(state.voiceChannelMembers).flat().map((voiceUser) => voiceUser.user_id));
+      const transitions = { ...state.participantTransitions };
+      snapshotUserIds.forEach((userId) => {
+        if (!knownUserIds.has(userId)) transitions[userId] = 'entering';
+      });
+      return { voiceChannelMembers: map, participantTransitions: transitions };
+    });
+    snapshotUserIds.forEach((userId) => {
+      window.setTimeout(() => set((state) => {
+        if (state.participantTransitions[userId] !== 'entering') return state;
+        const transitions = { ...state.participantTransitions };
+        delete transitions[userId];
+        return { participantTransitions: transitions };
+      }), 320);
     });
   },
 

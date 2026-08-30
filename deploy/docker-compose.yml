@@ -55,13 +55,14 @@ services:
     restart: unless-stopped
     command: --config /etc/livekit.yaml
     environment:
+      # LiveKit parses this value as YAML and requires the canonical "key: secret" spacing.
       - "LIVEKIT_KEYS=${LIVEKIT_API_KEY:-haven_key}: ${LIVEKIT_API_SECRET:-haven_secret_change_me_use_32_chars_minimum}"
     ports:
       - "7880:7880"
       - "7881:7881"
       - "50000-50050:50000-50050/udp"
     volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
+      - ./livekit.local.yaml:/etc/livekit.yaml
 
 volumes:
   caddy_data:
