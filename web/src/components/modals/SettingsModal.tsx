@@ -45,6 +45,7 @@ export const SettingsModal: React.FC = () => {
   const loadAudioDevices = useSettingsStore((s) => s.loadAudioDevices);
 
   const isNoiseSuppressionEnabled = useMediaStore((s) => s.isNoiseSuppressionEnabled);
+  const noiseSuppressionStatus = useMediaStore((s) => s.noiseSuppressionStatus);
   const toggleNoiseSuppression = useMediaStore((s) => s.toggleNoiseSuppression);
   const vadLevel = useMediaStore((s) => s.vadLevel);
 
@@ -464,7 +465,20 @@ export const SettingsModal: React.FC = () => {
             <div className="bg-haven-card border border-haven-border rounded-xl p-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-haven-emerald" />
-                <span className="text-xs font-semibold text-zinc-200">Cancelamento de Ruído (RNNoise)</span>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-zinc-200">Foco de Voz por IA (DTLN)</span>
+                  <span className="text-[10px] text-zinc-500">
+                    {noiseSuppressionStatus === 'active'
+                      ? 'Modelo neural ativo no microfone'
+                      : noiseSuppressionStatus === 'loading'
+                      ? 'Carregando modelo neural...'
+                      : noiseSuppressionStatus === 'fallback'
+                      ? 'Fallback nativo do navegador'
+                      : isNoiseSuppressionEnabled
+                      ? 'Será ativado ao entrar na chamada'
+                      : 'Desativado'}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
