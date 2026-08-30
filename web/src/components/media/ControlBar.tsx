@@ -22,6 +22,7 @@ export const ControlBar: React.FC = () => {
   const isCameraOn = useMediaStore((s) => s.isCameraOn);
   const isScreenSharing = useMediaStore((s) => s.isScreenSharing);
   const isNoiseSuppressionEnabled = useMediaStore((s) => s.isNoiseSuppressionEnabled);
+  const noiseSuppressionStatus = useMediaStore((s) => s.noiseSuppressionStatus);
   const vadLevel = useMediaStore((s) => s.vadLevel);
   const isSpeaking = useMediaStore((s) => s.isSpeaking);
 
@@ -34,6 +35,13 @@ export const ControlBar: React.FC = () => {
 
   const openModal = useSettingsStore((s) => s.openModal);
   const vadThreshold = useSettingsStore((s) => s.vadThreshold);
+  const noiseSuppressionTitle = {
+    idle: 'IA pronta para iniciar ao entrar na chamada',
+    loading: 'Carregando modelo DTLN...',
+    active: 'Cancelamento de ruído por IA ativo',
+    fallback: 'IA indisponível; usando supressão nativa do navegador',
+    disabled: 'Cancelamento de ruído por IA desativado',
+  }[noiseSuppressionStatus];
 
   return (
     <div className="h-18 bg-haven-darker border-t border-haven-border px-6 flex flex-col justify-center items-center gap-1.5 flex-shrink-0 z-20">
@@ -98,7 +106,7 @@ export const ControlBar: React.FC = () => {
           {isScreenSharing ? <ScreenShare className="w-4 h-4" /> : <ScreenShareOff className="w-4 h-4" />}
         </button>
 
-        {/* RNNoise Noise Suppression */}
+        {/* DTLN AI Noise Suppression */}
         <button
           onClick={toggleNoiseSuppression}
           className={`p-2.5 rounded-full transition-all duration-150 cursor-pointer flex items-center justify-center border ${
@@ -106,7 +114,7 @@ export const ControlBar: React.FC = () => {
               ? 'bg-haven-surface text-haven-emerald border-emerald-700/60'
               : 'bg-haven-surface hover:bg-haven-surface-hover text-zinc-400 border-haven-border'
           }`}
-          title={isNoiseSuppressionEnabled ? 'Cancelamento de Ruído Ativado' : 'Cancelamento de Ruído Desativado'}
+          title={noiseSuppressionTitle}
         >
           <Sparkles className="w-4 h-4" />
         </button>
