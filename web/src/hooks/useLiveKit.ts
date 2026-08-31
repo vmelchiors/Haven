@@ -14,7 +14,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useWebSocket, subscribeToWebSocketEvents } from './useWebSocket';
 import { WSMessage } from '../types';
 import {
-  createAINoiseSuppressionPipeline,
+  startNoiseSuppressionTransition,
   type AINoiseSuppressionPipeline,
 } from '../lib/aiNoiseSuppression';
 
@@ -80,10 +80,8 @@ export function useLiveKit(_channelId?: string) {
   // Compute effective mute state (Muted, Deafened, or PTT enabled and not held)
   const isEffectivelyMuted = isMuted || isDeafened || (isPttEnabled && !isPushToTalkActive);
   const isEffectivelyMutedRef = useRef(isEffectivelyMuted);
-
-  useEffect(() => {
-    isEffectivelyMutedRef.current = isEffectivelyMuted;
-  }, [isEffectivelyMuted]);
+  // Keep async media callbacks aligned with the latest render immediately.
+  isEffectivelyMutedRef.current = isEffectivelyMuted;
 
   // 1. Broadcast presence in voice channel to everyone
   useEffect(() => {
@@ -323,6 +321,7 @@ export function useLiveKit(_channelId?: string) {
 
     // Capture Local Microphone Audio Stream
     let isCancelled = false;
+    const suppressionAbortController = new AbortController();
     let vadAudioContext: AudioContext | null = null;
     let rawMicrophoneStream: MediaStream | null = null;
     let noiseSuppressionPipeline: AINoiseSuppressionPipeline | null = null;
@@ -355,7 +354,7 @@ export function useLiveKit(_channelId?: string) {
 
         const activateMicrophoneStream = async (nextStream: MediaStream) => {
           const track = nextStream.getAudioTracks()[0];
-          if (!track || isCancelled) return;
+          if (!track || isCancelled || suppressionAbortController.signal.aborted) return;
           track.enabled = !isEffectivelyMutedRef.current;
           localStreamsRef.current.mic = nextStream;
           await syncTracksToAllPeers();
@@ -364,48 +363,20 @@ export function useLiveKit(_channelId?: string) {
           });
         };
 
-        const activateNativeFallback = async () => {
-          await stream.getAudioTracks()[0]?.applyConstraints({ noiseSuppression: true }).catch(() => undefined);
-          await activateMicrophoneStream(stream);
-        };
+        const transition = await startNoiseSuppressionTransition({
+          inputStream: stream,
+          enabled: isNoiseSuppressionEnabled,
+          signal: suppressionAbortController.signal,
+          activateStream: activateMicrophoneStream,
+          setStatus: setNoiseSuppressionStatus,
+          onError: (error) => {
+            console.warn('[DTLN] AI noise suppression failed, using browser fallback:', error);
+          },
+        });
+        if (!transition || isCancelled) return;
 
-        // Join immediately with raw audio. Once the model is initialized the
-        // sender track is swapped without renegotiating or reconnecting.
-        await activateMicrophoneStream(stream);
-
-        let analysisStream = stream;
-        if (isNoiseSuppressionEnabled) {
-          setNoiseSuppressionStatus('loading');
-          try {
-            noiseSuppressionPipeline = await createAINoiseSuppressionPipeline(stream);
-            if (isCancelled) {
-              await noiseSuppressionPipeline.dispose();
-              return;
-            }
-
-            analysisStream = noiseSuppressionPipeline.stream;
-            await activateMicrophoneStream(analysisStream);
-
-            noiseSuppressionPipeline.ready
-              .then(() => {
-                if (!isCancelled) setNoiseSuppressionStatus('active');
-              })
-              .catch(async (error) => {
-                if (isCancelled) return;
-                console.warn('[DTLN] AI noise suppression failed, using browser fallback:', error);
-                setNoiseSuppressionStatus('fallback');
-                await activateNativeFallback();
-                await noiseSuppressionPipeline?.dispose();
-                noiseSuppressionPipeline = null;
-              });
-          } catch (error) {
-            console.warn('[DTLN] AI noise suppression unavailable, using browser fallback:', error);
-            setNoiseSuppressionStatus('fallback');
-            await activateNativeFallback();
-          }
-        } else {
-          setNoiseSuppressionStatus('disabled');
-        }
+        noiseSuppressionPipeline = transition.pipeline;
+        const analysisStream = transition.analysisStream;
 
         // Setup local audio analyzer for speaking detection (VAD)
         try {
@@ -850,6 +821,7 @@ export function useLiveKit(_channelId?: string) {
 
     return () => {
       isCancelled = true;
+      suppressionAbortController.abort();
       if (vadAudioContext) {
         vadAudioContext.close().catch(() => {});
       }
@@ -921,15 +893,7 @@ export function useLiveKit(_channelId?: string) {
       });
     };
 
-    room.on(RoomEvent.Connected, () => {
-      syncParticipants();
-      const microphoneTrack = localStreamsRef.current.mic?.getAudioTracks()[0];
-      if (microphoneTrack) {
-        publishMicrophoneToLiveKit(microphoneTrack).catch((error) => {
-          console.warn('[LiveKit] Failed to publish enhanced microphone:', error);
-        });
-      }
-    });
+    room.on(RoomEvent.Connected, syncParticipants);
 
     room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
       upsertParticipant({
@@ -1008,17 +972,26 @@ export function useLiveKit(_channelId?: string) {
     };
   }, [activeVoiceChannel?.id, rtcToken, rtcUrl, publishMicrophoneToLiveKit]);
 
-  // Sync LiveKit microphone state
+  // Sync the current microphone track and mute state without reconnecting the room.
   useEffect(() => {
     const room = roomRef.current;
-    if (room && room.state === 'connected') {
-      const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone);
-      if (publication) {
-        const action = isEffectivelyMuted ? publication.mute() : publication.unmute();
-        action.catch(() => {});
-      }
-    }
-  }, [isEffectivelyMuted]);
+    if (!room) return;
+
+    const syncMicrophone = () => {
+      const microphoneTrack = localStreamsRef.current.mic?.getAudioTracks()[0];
+      if (!microphoneTrack) return;
+      publishMicrophoneToLiveKit(microphoneTrack).catch((error) => {
+        console.warn('[LiveKit] Failed to sync enhanced microphone:', error);
+      });
+    };
+
+    room.on(RoomEvent.Connected, syncMicrophone);
+    if (room.state === 'connected') syncMicrophone();
+
+    return () => {
+      room.off(RoomEvent.Connected, syncMicrophone);
+    };
+  }, [activeVoiceChannel?.id, rtcToken, rtcUrl, isEffectivelyMuted, publishMicrophoneToLiveKit]);
 
   // 6. Sync Camera (SFU + P2P Mesh + Local Preview)
   useEffect(() => {
