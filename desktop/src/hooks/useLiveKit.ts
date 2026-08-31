@@ -8,7 +8,7 @@ import {
   Track,
   VideoPresets,
 } from 'livekit-client';
-import { useMediaStore } from '../stores/mediaStore';
+import { useMediaStore, type RemoteAudioSource } from '../stores/mediaStore';
 import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useWebSocket, subscribeToWebSocketEvents } from './useWebSocket';
@@ -37,12 +37,21 @@ interface PeerState {
   audioTransceiver: RTCRtpTransceiver;
   cameraTransceiver: RTCRtpTransceiver;
   screenTransceiver: RTCRtpTransceiver;
+  screenAudioTransceiver: RTCRtpTransceiver;
 }
+
+interface RemoteAudioOutput {
+  element: HTMLAudioElement;
+  identity: string;
+  source: RemoteAudioSource;
+}
+
+const remoteAudioKey = (identity: string, source: RemoteAudioSource) => `${source}:${identity}`;
 
 export function useLiveKit(_channelId?: string) {
   const roomRef = useRef<Room | null>(null);
   const peersRef = useRef<Map<string, PeerState>>(new Map());
-  const remoteAudiosRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const remoteAudiosRef = useRef<Map<string, RemoteAudioOutput>>(new Map());
   const localStreamsRef = useRef<{
     mic: MediaStream | null;
     camera: MediaStream | null;
@@ -63,6 +72,8 @@ export function useLiveKit(_channelId?: string) {
   const isNoiseSuppressionEnabled = useMediaStore((s) => s.isNoiseSuppressionEnabled);
   const isPushToTalkActive = useMediaStore((s) => s.isPushToTalkActive);
   const voiceChannelMembers = useMediaStore((s) => s.voiceChannelMembers);
+  const remoteAudioPreferences = useMediaStore((s) => s.remoteAudioPreferences);
+  const isCompanionModeEnabled = useMediaStore((s) => s.isCompanionModeEnabled);
 
   const selectedInputDeviceId = useSettingsStore((s) => s.selectedInputDeviceId);
   const selectedOutputDeviceId = useSettingsStore((s) => s.selectedOutputDeviceId);
@@ -78,10 +89,72 @@ export function useLiveKit(_channelId?: string) {
   const { sendVoiceJoin, sendVoiceLeave, sendVoiceState, sendWebRTCSignal } = useWebSocket();
 
   // Compute effective mute state (Muted, Deafened, or PTT enabled and not held)
-  const isEffectivelyMuted = isMuted || isDeafened || (isPttEnabled && !isPushToTalkActive);
+  const isEffectivelyMuted = isMuted || isDeafened || isCompanionModeEnabled
+    || (isPttEnabled && !isPushToTalkActive);
   const isEffectivelyMutedRef = useRef(isEffectivelyMuted);
   // Keep async media callbacks aligned with the latest render immediately.
   isEffectivelyMutedRef.current = isEffectivelyMuted;
+
+  const configureRemoteAudioOutput = useCallback((output: RemoteAudioOutput) => {
+    const mediaState = useMediaStore.getState();
+    const settingsState = useSettingsStore.getState();
+    const preference = mediaState.remoteAudioPreferences[output.identity];
+    const individualVolume = output.source === 'voice'
+      ? preference?.voiceVolume ?? 100
+      : preference?.screenVolume ?? 100;
+    const locallyMuted = output.source === 'voice'
+      ? preference?.voiceMuted ?? false
+      : preference?.screenMuted ?? false;
+
+    output.element.volume = Math.min(
+      Math.max((settingsState.outputVolume / 100) * (individualVolume / 100), 0),
+      1,
+    );
+    output.element.muted = mediaState.isDeafened
+      || mediaState.isCompanionModeEnabled
+      || locallyMuted
+      || individualVolume === 0;
+  }, []);
+
+  const attachRemoteAudio = useCallback((
+    identity: string,
+    source: RemoteAudioSource,
+    stream: MediaStream,
+  ) => {
+    const key = remoteAudioKey(identity, source);
+    let output = remoteAudiosRef.current.get(key);
+    if (!output) {
+      const element = document.createElement('audio');
+      element.autoplay = true;
+      element.setAttribute('playsinline', 'true');
+      element.setAttribute('autoplay', 'true');
+      element.style.display = 'none';
+      document.body.appendChild(element);
+      output = { element, identity, source };
+      remoteAudiosRef.current.set(key, output);
+    }
+
+    output.element.srcObject = stream;
+    configureRemoteAudioOutput(output);
+    const selectedOutput = useSettingsStore.getState().selectedOutputDeviceId;
+    if (selectedOutput && selectedOutput !== 'default' && (output.element as any).setSinkId) {
+      (output.element as any).setSinkId(selectedOutput).catch(() => undefined);
+    }
+    output.element.play().catch((error) => {
+      console.warn('[Remote Audio] Play error:', error);
+    });
+    return output.element;
+  }, [configureRemoteAudioOutput]);
+
+  const removeRemoteAudioOutputs = useCallback((identity: string, source?: RemoteAudioSource) => {
+    remoteAudiosRef.current.forEach((output, key) => {
+      if (output.identity !== identity || (source && output.source !== source)) return;
+      output.element.pause();
+      output.element.srcObject = null;
+      output.element.remove();
+      remoteAudiosRef.current.delete(key);
+    });
+  }, []);
 
   // 1. Broadcast presence in voice channel to everyone
   useEffect(() => {
@@ -161,13 +234,7 @@ export function useLiveKit(_channelId?: string) {
           peer.pc.close();
           peersRef.current.delete(id);
         }
-        const audio = remoteAudiosRef.current.get(id);
-        if (audio) {
-          audio.pause();
-          audio.srcObject = null;
-          audio.remove();
-          remoteAudiosRef.current.delete(id);
-        }
+        removeRemoteAudioOutputs(id);
       }
     });
 
@@ -213,20 +280,17 @@ export function useLiveKit(_channelId?: string) {
     }
   }, [isEffectivelyMuted, isDeafened, currentUser?.id]);
 
-  // Sync deafen and output volume state on all remote audio outputs
+  // Sync global and per-participant preferences on all remote audio outputs.
   useEffect(() => {
-    remoteAudiosRef.current.forEach((audio) => {
-      audio.muted = isDeafened;
-      audio.volume = isDeafened ? 0 : Math.min(Math.max(outputVolume / 100, 0), 1);
-    });
-  }, [isDeafened, outputVolume]);
+    remoteAudiosRef.current.forEach(configureRemoteAudioOutput);
+  }, [isDeafened, isCompanionModeEnabled, outputVolume, remoteAudioPreferences, configureRemoteAudioOutput]);
 
   // Global user interaction unblocker for browser autoplay policies
   useEffect(() => {
     const unlockAudio = () => {
-      remoteAudiosRef.current.forEach((audio) => {
-        if (audio.paused && audio.srcObject) {
-          audio.play().catch(() => {});
+      remoteAudiosRef.current.forEach(({ element }) => {
+        if (element.paused && element.srcObject) {
+          element.play().catch(() => {});
         }
       });
     };
@@ -269,6 +333,16 @@ export function useLiveKit(_channelId?: string) {
     if (peer.screenTransceiver.sender.track !== screenTrack) {
       try {
         await peer.screenTransceiver.sender.replaceTrack(screenTrack);
+      } catch {}
+    }
+
+    // 4. Screen Share Audio Track
+    const screenAudioTrack = isScreenActive
+      ? (localStreamsRef.current.screen?.getAudioTracks()[0] || null)
+      : null;
+    if (peer.screenAudioTransceiver.sender.track !== screenAudioTrack) {
+      try {
+        await peer.screenAudioTransceiver.sender.replaceTrack(screenAudioTrack);
       } catch {}
     }
   }, []);
@@ -441,9 +515,11 @@ export function useLiveKit(_channelId?: string) {
       // index 0: audio (mic)
       // index 1: video (camera)
       // index 2: video (screen)
+      // index 3: audio (screen)
       const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
       const cameraTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
       const screenTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
+      const screenAudioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
 
       const peerState: PeerState = {
         pc,
@@ -453,6 +529,7 @@ export function useLiveKit(_channelId?: string) {
         audioTransceiver,
         cameraTransceiver,
         screenTransceiver,
+        screenAudioTransceiver,
       };
       peersRef.current.set(targetUserId, peerState);
 
@@ -471,6 +548,10 @@ export function useLiveKit(_channelId?: string) {
       const screenTrack = localStreamsRef.current.screen?.getVideoTracks()[0] || null;
       if (screenTrack) {
         screenTransceiver.sender.replaceTrack(screenTrack).catch(() => {});
+      }
+      const screenAudioTrack = localStreamsRef.current.screen?.getAudioTracks()[0] || null;
+      if (screenAudioTrack) {
+        screenAudioTransceiver.sender.replaceTrack(screenAudioTrack).catch(() => {});
       }
 
       // Handle ICE Candidates
@@ -507,40 +588,16 @@ export function useLiveKit(_channelId?: string) {
         const stream = event.streams[0] || new MediaStream([track]);
 
         if (track.kind === 'audio') {
-          let audio = remoteAudiosRef.current.get(targetUserId);
-          if (!audio) {
-            audio = document.createElement('audio');
-            audio.autoplay = true;
-            audio.setAttribute('playsinline', 'true');
-            audio.setAttribute('autoplay', 'true');
-            audio.style.display = 'none';
-            document.body.appendChild(audio);
-            remoteAudiosRef.current.set(targetUserId, audio);
-          }
-          audio.srcObject = stream;
-          audio.volume = isDeafened ? 0 : Math.min(Math.max(outputVolume / 100, 0), 1);
-          audio.muted = isDeafened;
-
-          if (selectedOutputDeviceId && selectedOutputDeviceId !== 'default' && (audio as any).setSinkId) {
-            (audio as any).setSinkId(selectedOutputDeviceId).catch(() => {});
-          }
-
-          const playAudio = () => {
-            const playPromise = audio?.play();
-            if (playPromise !== undefined) {
-              playPromise.catch((err) => {
-                console.warn('[WebRTC Audio] Play error:', err);
-              });
-            }
-          };
-
-          playAudio();
+          const audioSource: RemoteAudioSource = event.transceiver === screenAudioTransceiver
+            ? 'screen'
+            : 'voice';
+          const audio = attachRemoteAudio(targetUserId, audioSource, stream);
           track.onunmute = () => {
-            playAudio();
+            audio.play().catch(() => undefined);
           };
 
           // Remote VAD speaking detection for real-time visual feedback
-          try {
+          if (audioSource === 'voice') try {
             const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
             if (AudioCtx) {
               const remoteCtx = new AudioCtx();
@@ -703,13 +760,7 @@ export function useLiveKit(_channelId?: string) {
             existingPeer.pc.close();
             peersRef.current.delete(payload.user_id);
           }
-          const existingAudio = remoteAudiosRef.current.get(payload.user_id);
-          if (existingAudio) {
-            existingAudio.pause();
-            existingAudio.srcObject = null;
-            existingAudio.remove();
-            remoteAudiosRef.current.delete(payload.user_id);
-          }
+          removeRemoteAudioOutputs(payload.user_id);
 
           // Initialize fresh peer state
           getOrCreatePeer(payload.user_id, payload.username);
@@ -722,13 +773,7 @@ export function useLiveKit(_channelId?: string) {
             peer.pc.close();
             peersRef.current.delete(payload.user_id);
           }
-          const audio = remoteAudiosRef.current.get(payload.user_id);
-          if (audio) {
-            audio.pause();
-            audio.srcObject = null;
-            audio.remove();
-            remoteAudiosRef.current.delete(payload.user_id);
-          }
+          removeRemoteAudioOutputs(payload.user_id);
           removeParticipant(payload.user_id);
         }
       } else if (msg.type === 'webrtc_signal') {
@@ -831,10 +876,10 @@ export function useLiveKit(_channelId?: string) {
       localStreamsRef.current.mic = null;
       peersRef.current.forEach((peer) => peer.pc.close());
       peersRef.current.clear();
-      remoteAudiosRef.current.forEach((audio) => {
-        audio.pause();
-        audio.srcObject = null;
-        audio.remove();
+      remoteAudiosRef.current.forEach(({ element }) => {
+        element.pause();
+        element.srcObject = null;
+        element.remove();
       });
       remoteAudiosRef.current.clear();
     };
@@ -909,6 +954,7 @@ export function useLiveKit(_channelId?: string) {
     });
 
     room.on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
+      removeRemoteAudioOutputs(p.identity);
       removeParticipant(p.identity);
     });
 
@@ -927,7 +973,10 @@ export function useLiveKit(_channelId?: string) {
       RoomEvent.TrackSubscribed,
       (track: RemoteTrack, pub: RemoteTrackPublication, p: RemoteParticipant) => {
         if (track.kind === Track.Kind.Audio) {
-          track.attach();
+          const source: RemoteAudioSource = pub.source === Track.Source.ScreenShareAudio
+            ? 'screen'
+            : 'voice';
+          attachRemoteAudio(p.identity, source, new MediaStream([track.mediaStreamTrack]));
         } else if (track.kind === Track.Kind.Video) {
           if (pub.source === Track.Source.Camera) {
             upsertParticipant({ identity: p.identity, isCameraOn: true, cameraTrack: track.mediaStreamTrack });
@@ -942,7 +991,10 @@ export function useLiveKit(_channelId?: string) {
       RoomEvent.TrackUnsubscribed,
       (track: RemoteTrack, pub: RemoteTrackPublication, p: RemoteParticipant) => {
         if (track.kind === Track.Kind.Audio) {
-          track.detach();
+          const source: RemoteAudioSource = pub.source === Track.Source.ScreenShareAudio
+            ? 'screen'
+            : 'voice';
+          removeRemoteAudioOutputs(p.identity, source);
         } else if (pub.source === Track.Source.Camera) {
           upsertParticipant({ identity: p.identity, isCameraOn: false, cameraTrack: undefined });
         } else if (pub.source === Track.Source.ScreenShare) {
@@ -970,7 +1022,7 @@ export function useLiveKit(_channelId?: string) {
       room.disconnect();
       roomRef.current = null;
     };
-  }, [activeVoiceChannel?.id, rtcToken, rtcUrl, publishMicrophoneToLiveKit]);
+  }, [activeVoiceChannel?.id, rtcToken, rtcUrl, publishMicrophoneToLiveKit, attachRemoteAudio, removeRemoteAudioOutputs]);
 
   // Sync the current microphone track and mute state without reconnecting the room.
   useEffect(() => {
