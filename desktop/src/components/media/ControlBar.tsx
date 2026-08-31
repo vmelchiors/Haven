@@ -11,6 +11,7 @@ import {
   Sparkles,
   Settings,
   PhoneOff,
+  Laptop2,
 } from 'lucide-react';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -25,12 +26,14 @@ export const ControlBar: React.FC = () => {
   const noiseSuppressionStatus = useMediaStore((s) => s.noiseSuppressionStatus);
   const vadLevel = useMediaStore((s) => s.vadLevel);
   const isSpeaking = useMediaStore((s) => s.isSpeaking);
+  const isCompanionModeEnabled = useMediaStore((s) => s.isCompanionModeEnabled);
 
   const toggleMute = useMediaStore((s) => s.toggleMute);
   const toggleDeafen = useMediaStore((s) => s.toggleDeafen);
   const toggleCamera = useMediaStore((s) => s.toggleCamera);
   const toggleScreenShare = useMediaStore((s) => s.toggleScreenShare);
   const toggleNoiseSuppression = useMediaStore((s) => s.toggleNoiseSuppression);
+  const toggleCompanionMode = useMediaStore((s) => s.toggleCompanionMode);
   const disconnectVoice = useMediaStore((s) => s.disconnectVoice);
 
   const openModal = useSettingsStore((s) => s.openModal);
@@ -58,15 +61,15 @@ export const ControlBar: React.FC = () => {
         <button
           onClick={toggleMute}
           className={`p-2.5 rounded-full transition-all duration-150 cursor-pointer flex items-center justify-center border ${
-            isMuted || isDeafened
+            isMuted || isDeafened || isCompanionModeEnabled
               ? 'bg-haven-rose hover:bg-red-600 text-white border-red-500/30'
               : isSpeaking
               ? 'bg-haven-surface text-haven-emerald border-haven-emerald ring-2 ring-haven-emerald/30'
               : 'bg-haven-surface hover:bg-haven-surface-hover text-zinc-300 hover:text-white border-haven-border'
           }`}
-          title={isMuted ? 'Desmutar Microfone' : 'Mutar Microfone'}
+          title={isCompanionModeEnabled ? 'Microfone desativado pelo modo dispositivo próximo' : isMuted ? 'Desmutar Microfone' : 'Mutar Microfone'}
         >
-          {isMuted || isDeafened ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          {isMuted || isDeafened || isCompanionModeEnabled ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
         </button>
 
         {/* Headphones Deafen */}
@@ -119,6 +122,19 @@ export const ControlBar: React.FC = () => {
           title={noiseSuppressionTitle}
         >
           <Sparkles className="w-4 h-4" />
+        </button>
+
+        {/* Nearby companion device mode */}
+        <button
+          onClick={toggleCompanionMode}
+          className={`p-2.5 rounded-full transition-all duration-150 cursor-pointer flex items-center justify-center border ${
+            isCompanionModeEnabled
+              ? 'bg-haven-cyan text-white border-cyan-400/30'
+              : 'bg-haven-surface hover:bg-haven-surface-hover text-zinc-300 hover:text-white border-haven-border'
+          }`}
+          title={isCompanionModeEnabled ? 'Desativar modo dispositivo próximo' : 'Usar como dispositivo próximo sem áudio'}
+        >
+          <Laptop2 className="w-4 h-4" />
         </button>
 
         {/* Settings */}
