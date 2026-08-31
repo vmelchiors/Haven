@@ -35,13 +35,15 @@ export const ControlBar: React.FC = () => {
 
   const openModal = useSettingsStore((s) => s.openModal);
   const vadThreshold = useSettingsStore((s) => s.vadThreshold);
+  const effectiveNoiseSuppressionStatus = noiseSuppressionStatus
+    ?? (isNoiseSuppressionEnabled ? 'idle' : 'disabled');
   const noiseSuppressionTitle = {
     idle: 'IA pronta para iniciar ao entrar na chamada',
     loading: 'Carregando modelo DTLN...',
     active: 'Cancelamento de ruído por IA ativo',
     fallback: 'IA indisponível; usando supressão nativa do navegador',
     disabled: 'Cancelamento de ruído por IA desativado',
-  }[noiseSuppressionStatus];
+  }[effectiveNoiseSuppressionStatus] ?? 'Status do cancelamento de ruído indisponível';
 
   return (
     <div className="h-18 bg-haven-darker border-t border-haven-border px-6 flex flex-col justify-center items-center gap-1.5 flex-shrink-0 z-20">
