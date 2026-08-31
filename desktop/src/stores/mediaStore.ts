@@ -4,6 +4,14 @@ import { useAuthStore } from './authStore';
 import { sendWebSocketMessage } from '../hooks/useWebSocket';
 
 export type NoiseSuppressionStatus = 'idle' | 'loading' | 'active' | 'fallback' | 'disabled';
+export type RemoteAudioSource = 'voice' | 'screen';
+
+export interface RemoteAudioPreference {
+  voiceVolume: number;
+  voiceMuted: boolean;
+  screenVolume: number;
+  screenMuted: boolean;
+}
 
 interface MediaState {
   activeChannel: Channel | null;
@@ -24,6 +32,8 @@ interface MediaState {
   vadLevel: number;
   isSpeaking: boolean;
   focusedParticipant: string | null;
+  remoteAudioPreferences: Record<string, RemoteAudioPreference>;
+  isCompanionModeEnabled: boolean;
 
   connectVoice: (channel: Channel, token?: string, url?: string, roomName?: string) => void;
   disconnectVoice: () => void;
@@ -42,6 +52,9 @@ interface MediaState {
   setPushToTalkActive: (active: boolean) => void;
   setVadLevel: (level: number, speaking: boolean) => void;
   setFocusedParticipant: (identity: string | null) => void;
+  setRemoteAudioVolume: (identity: string, source: RemoteAudioSource, volume: number) => void;
+  toggleRemoteAudioMuted: (identity: string, source: RemoteAudioSource) => void;
+  toggleCompanionMode: () => void;
 
   upsertParticipant: (participant: Partial<VoiceParticipant> & { identity: string }) => void;
   addParticipant: (participant: VoiceParticipant) => void;
@@ -70,6 +83,8 @@ export const useMediaStore = create<MediaState>((set) => ({
   vadLevel: 0,
   isSpeaking: false,
   focusedParticipant: null,
+  remoteAudioPreferences: {},
+  isCompanionModeEnabled: false,
 
   setVoiceSnapshot: (snapshot) => {
     set((state) => {
@@ -372,6 +387,39 @@ export const useMediaStore = create<MediaState>((set) => ({
       return { vadLevel: level, isSpeaking };
     }),
   setFocusedParticipant: (identity) => set({ focusedParticipant: identity }),
+  setRemoteAudioVolume: (identity, source, volume) =>
+    set((state) => {
+      const current = state.remoteAudioPreferences[identity] || {
+        voiceVolume: 100,
+        voiceMuted: false,
+        screenVolume: 100,
+        screenMuted: false,
+      };
+      const volumeKey = source === 'voice' ? 'voiceVolume' : 'screenVolume';
+      return {
+        remoteAudioPreferences: {
+          ...state.remoteAudioPreferences,
+          [identity]: { ...current, [volumeKey]: Math.min(100, Math.max(0, Math.round(volume))) },
+        },
+      };
+    }),
+  toggleRemoteAudioMuted: (identity, source) =>
+    set((state) => {
+      const current = state.remoteAudioPreferences[identity] || {
+        voiceVolume: 100,
+        voiceMuted: false,
+        screenVolume: 100,
+        screenMuted: false,
+      };
+      const mutedKey = source === 'voice' ? 'voiceMuted' : 'screenMuted';
+      return {
+        remoteAudioPreferences: {
+          ...state.remoteAudioPreferences,
+          [identity]: { ...current, [mutedKey]: !current[mutedKey] },
+        },
+      };
+    }),
+  toggleCompanionMode: () => set((state) => ({ isCompanionModeEnabled: !state.isCompanionModeEnabled })),
 
   upsertParticipant: (p) => {
     set((state) => {
