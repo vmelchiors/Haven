@@ -48,6 +48,8 @@ export const SettingsModal: React.FC = () => {
   const noiseSuppressionStatus = useMediaStore((s) => s.noiseSuppressionStatus);
   const toggleNoiseSuppression = useMediaStore((s) => s.toggleNoiseSuppression);
   const vadLevel = useMediaStore((s) => s.vadLevel);
+  const effectiveNoiseSuppressionStatus = noiseSuppressionStatus
+    ?? (isNoiseSuppressionEnabled ? 'idle' : 'disabled');
 
   const logout = useAuthStore((s) => s.logout);
   const currentUser = useAuthStore((s) => s.user);
@@ -468,11 +470,11 @@ export const SettingsModal: React.FC = () => {
                 <div className="flex flex-col">
                   <span className="text-xs font-semibold text-zinc-200">Foco de Voz por IA (DTLN)</span>
                   <span className="text-[10px] text-zinc-500">
-                    {noiseSuppressionStatus === 'active'
+                    {effectiveNoiseSuppressionStatus === 'active'
                       ? 'Modelo neural ativo no microfone'
-                      : noiseSuppressionStatus === 'loading'
+                      : effectiveNoiseSuppressionStatus === 'loading'
                       ? 'Carregando modelo neural...'
-                      : noiseSuppressionStatus === 'fallback'
+                      : effectiveNoiseSuppressionStatus === 'fallback'
                       ? 'Fallback nativo do navegador'
                       : isNoiseSuppressionEnabled
                       ? 'Será ativado ao entrar na chamada'
