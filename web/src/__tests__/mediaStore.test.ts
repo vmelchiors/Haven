@@ -15,6 +15,7 @@ describe('MediaStore', () => {
       vadLevel: 0,
       participants: {},
       focusedParticipant: null,
+      watchedScreenShares: {},
     });
   });
 
@@ -117,6 +118,16 @@ describe('MediaStore', () => {
 
     expect(useMediaStore.getState().participants['user_b']).toBeUndefined();
     vi.useRealTimers();
+  });
+
+  it('should subscribe to a screen share only after the viewer chooses to watch it', () => {
+    useMediaStore.getState().setScreenShareWatching('user_streamer', true);
+    expect(useMediaStore.getState().watchedScreenShares.user_streamer).toBe(true);
+    expect(useMediaStore.getState().focusedParticipant).toBe('user_streamer');
+
+    useMediaStore.getState().setScreenShareWatching('user_streamer', false);
+    expect(useMediaStore.getState().watchedScreenShares.user_streamer).toBeUndefined();
+    expect(useMediaStore.getState().focusedParticipant).toBeNull();
   });
 
   it('should replace voice snapshots and clear each entrance transition safely', () => {

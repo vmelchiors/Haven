@@ -7,6 +7,7 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useLiveKit } from './hooks/useLiveKit';
 import { usePushToTalk } from './hooks/usePushToTalk';
+import { useCallFeedback } from './hooks/useCallFeedback';
 
 // Layout
 import { ServerSidebar } from './components/layout/ServerSidebar';
@@ -50,6 +51,7 @@ export const App: React.FC = () => {
 
   // Initialize Global Push-to-Talk listener
   usePushToTalk();
+  useCallFeedback();
 
   useEffect(() => {
     useAuthStore.getState().checkAuth();
@@ -157,7 +159,7 @@ export const App: React.FC = () => {
         )}
 
         {/* 4. Member List (Right dock) */}
-        <MemberList />
+        {selectedChannel?.type === 'TEXT' && <MemberList />}
       </main>
 
       {/* Modals Container */}

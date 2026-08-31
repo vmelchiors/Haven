@@ -16,16 +16,17 @@ import (
 type WSEventType string
 
 const (
-	EventChatMessage      WSEventType = "chat_message"
-	EventUserTyping       WSEventType = "user_typing"
-	EventPresenceUpdate   WSEventType = "presence_update"
-	EventUserJoinedVoice  WSEventType = "user_joined_voice"
-	EventUserLeftVoice    WSEventType = "user_left_voice"
-	EventVoiceStateUpdate WSEventType = "voice_state_update"
-	EventVoiceSnapshot    WSEventType = "voice_snapshot"
-	EventWebRTCSignal     WSEventType = "webrtc_signal"
-	EventPing             WSEventType = "ping"
-	EventError            WSEventType = "error"
+	EventChatMessage        WSEventType = "chat_message"
+	EventUserTyping         WSEventType = "user_typing"
+	EventPresenceUpdate     WSEventType = "presence_update"
+	EventUserProfileUpdated WSEventType = "user_profile_updated"
+	EventUserJoinedVoice    WSEventType = "user_joined_voice"
+	EventUserLeftVoice      WSEventType = "user_left_voice"
+	EventVoiceStateUpdate   WSEventType = "voice_state_update"
+	EventVoiceSnapshot      WSEventType = "voice_snapshot"
+	EventWebRTCSignal       WSEventType = "webrtc_signal"
+	EventPing               WSEventType = "ping"
+	EventError              WSEventType = "error"
 )
 
 // WSMessage is the envelope for WebSocket messages
@@ -55,6 +56,12 @@ type PresencePayload struct {
 	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 	Status   string `json:"status"` // online, idle, busy, offline
+}
+
+type UserProfilePayload struct {
+	UserID    string `json:"user_id"`
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatar_url"`
 }
 
 type VoiceStatePayload struct {
@@ -390,6 +397,24 @@ func (h *Hub) ProcessMessage(client *Client, rawData []byte) {
 			return
 		}
 		h.BroadcastPresence(client.UserID, client.Username, presence.Status)
+
+	case EventUserProfileUpdated:
+		var profile UserProfilePayload
+		if err := json.Unmarshal(msg.Payload, &profile); err != nil {
+			return
+		}
+		profile.UserID = client.UserID
+		profile.Username = client.Username
+		if profile.AvatarURL == "" {
+			return
+		}
+
+		pBytes, _ := json.Marshal(profile)
+		outMsg, _ := json.Marshal(WSMessage{
+			Type:    EventUserProfileUpdated,
+			Payload: pBytes,
+		})
+		h.broadcast <- &BroadcastMessage{Sender: client, ChannelID: "", Data: outMsg}
 
 	case EventUserJoinedVoice:
 		var vs VoiceStatePayload

@@ -32,7 +32,6 @@ func createSamplePNG(width, height int) []byte {
 	return buf.Bytes()
 }
 
-
 func setupHandlerTestEnv(t *testing.T) (*auth.Handler, *database.DB, *config.Config, func()) {
 	tempDir, err := os.MkdirTemp("", "haven-handler-test-*")
 	if err != nil {
@@ -177,8 +176,22 @@ func TestAuthHandler_GetMeAndAcceptToS(t *testing.T) {
 }
 
 func TestAuthHandler_UploadAvatar(t *testing.T) {
-	handler, _, _, cleanup := setupHandlerTestEnv(t)
+	handler, db, _, cleanup := setupHandlerTestEnv(t)
 	defer cleanup()
+
+	regPayload := map[string]string{
+		"username": "avatar-user",
+		"password": "password123",
+	}
+	regBody, _ := json.Marshal(regPayload)
+	regReq := httptest.NewRequest("POST", "/api/auth/register", bytes.NewReader(regBody))
+	regW := httptest.NewRecorder()
+	handler.Register(regW, regReq)
+	if regW.Code != http.StatusCreated {
+		t.Fatalf("expected registration before avatar upload, got %d: %s", regW.Code, regW.Body.String())
+	}
+	var regResp auth.AuthResponse
+	_ = json.NewDecoder(regW.Body).Decode(&regResp)
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -191,6 +204,9 @@ func TestAuthHandler_UploadAvatar(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/auth/avatar", &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, &auth.Claims{
+		UserID: regResp.User.ID, Username: regResp.User.Username,
+	}))
 	w := httptest.NewRecorder()
 
 	handler.UploadAvatar(w, req)
@@ -202,6 +218,14 @@ func TestAuthHandler_UploadAvatar(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&res)
 	if res["avatar_url"] == "" {
 		t.Errorf("expected avatar_url in response")
+	}
+
+	var storedAvatar string
+	if err := db.QueryRow("SELECT avatar_url FROM users WHERE id = ?", regResp.User.ID).Scan(&storedAvatar); err != nil {
+		t.Fatalf("failed to read persisted avatar: %v", err)
+	}
+	if storedAvatar != res["avatar_url"] {
+		t.Fatalf("expected persisted avatar %q, got %q", res["avatar_url"], storedAvatar)
 	}
 }
 
@@ -272,4 +296,3 @@ func TestAuthHandler_RecoveryEndpoints(t *testing.T) {
 		t.Errorf("expected valid auth response on password reset")
 	}
 }
-

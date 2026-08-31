@@ -63,3 +63,39 @@ body {
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+@keyframes havenParticipantEnter {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes havenParticipantLeave {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(5px) scale(0.96); }
+}
+
+@keyframes havenDockEnter {
+  from { opacity: 0; transform: translate(-50%, 10px) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+@keyframes havenStageEnter {
+  from { opacity: 0; transform: scale(0.985); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.haven-participant-enter { animation: havenParticipantEnter 220ms ease-out both; }
+.haven-participant-leave { animation: havenParticipantLeave 180ms ease-in both; }
+.haven-dock-enter { animation: havenDockEnter 240ms ease-out both; }
+.haven-stage-enter { animation: havenStageEnter 260ms ease-out both; }
+.haven-notice-enter { animation: havenParticipantEnter 180ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .haven-participant-enter,
+  .haven-participant-leave,
+  .haven-dock-enter,
+  .haven-stage-enter,
+  .haven-notice-enter {
+    animation: none !important;
+  }
+}

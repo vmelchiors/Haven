@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   MessageSquarePlus,
   Download,
+  BellRing,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -36,12 +37,14 @@ export const SettingsModal: React.FC = () => {
   const isPttEnabled = useSettingsStore((s) => s.isPttEnabled);
   const pttKey = useSettingsStore((s) => s.pttKey);
   const vadThreshold = useSettingsStore((s) => s.vadThreshold);
+  const callSoundsEnabled = useSettingsStore((s) => s.callSoundsEnabled);
 
   const setInputDevice = useSettingsStore((s) => s.setInputDevice);
   const setOutputDevice = useSettingsStore((s) => s.setOutputDevice);
   const setPttEnabled = useSettingsStore((s) => s.setPttEnabled);
   const setPttKey = useSettingsStore((s) => s.setPttKey);
   const setVadThreshold = useSettingsStore((s) => s.setVadThreshold);
+  const setCallSoundsEnabled = useSettingsStore((s) => s.setCallSoundsEnabled);
   const loadAudioDevices = useSettingsStore((s) => s.loadAudioDevices);
 
   const isNoiseSuppressionEnabled = useMediaStore((s) => s.isNoiseSuppressionEnabled);
@@ -478,6 +481,29 @@ export const SettingsModal: React.FC = () => {
                     isNoiseSuppressionEnabled ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
+              </button>
+            </div>
+
+            <div className="bg-haven-card border border-haven-border rounded-xl p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BellRing className="w-4 h-4 text-haven-cyan" />
+                <div>
+                  <div className="text-xs font-semibold text-zinc-200">Sons da chamada</div>
+                  <div className="text-[10px] text-zinc-500">Entrada, saída e transmissão</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label={callSoundsEnabled ? 'Desativar sons da chamada' : 'Ativar sons da chamada'}
+                aria-pressed={callSoundsEnabled}
+                onClick={() => setCallSoundsEnabled(!callSoundsEnabled)}
+                className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                  callSoundsEnabled ? 'bg-haven-cyan' : 'bg-haven-border'
+                }`}
+              >
+                <div className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
+                  callSoundsEnabled ? 'translate-x-4' : 'translate-x-0'
+                }`} />
               </button>
             </div>
           </div>

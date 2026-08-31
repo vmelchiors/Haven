@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -38,6 +38,8 @@ export const Avatar: React.FC<AvatarProps> = ({
   status,
   className,
 }) => {
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [src]);
   const sizes = {
     xs: 'w-5 h-5 text-[9px]',
     sm: 'w-7 h-7 text-xs',
@@ -82,8 +84,8 @@ export const Avatar: React.FC<AvatarProps> = ({
           )
         )}
       >
-        {src ? (
-          <img src={src} alt={name} className="w-full h-full object-cover" />
+        {src && !imageFailed ? (
+          <img src={src} alt={name} className="w-full h-full object-cover" onError={() => setImageFailed(true)} />
         ) : (
           <div className={twMerge(clsx('w-full h-full flex items-center justify-center font-bold tracking-tight', palette))}>
             {getInitials(name)}

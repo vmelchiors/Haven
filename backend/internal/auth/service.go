@@ -166,6 +166,17 @@ func (s *Service) GetUserByID(userID string) (*database.User, error) {
 	return user, nil
 }
 
+// UpdateAvatar persists the processed avatar URL for the authenticated user.
+func (s *Service) UpdateAvatar(userID, avatarURL string) error {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(avatarURL) == "" {
+		return errors.New("user and avatar URL are required")
+	}
+	if err := s.userRepo.UpdateAvatar(context.Background(), userID, avatarURL); err != nil {
+		return fmt.Errorf("failed to update avatar: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) generateTokensForUser(user *database.User) (*TokenPair, error) {
 	accessToken, err := GenerateAccessToken(user.ID, user.Username, user.IsAdmin, user.AcceptedToSVersion, s.jwtSecret)
 	if err != nil {

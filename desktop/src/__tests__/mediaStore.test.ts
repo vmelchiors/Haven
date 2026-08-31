@@ -15,6 +15,7 @@ describe('MediaStore', () => {
       vadLevel: 0,
       participants: {},
       focusedParticipant: null,
+      watchedScreenShares: {},
     });
   });
 
@@ -82,6 +83,16 @@ describe('MediaStore', () => {
     expect(useMediaStore.getState().isScreenSharing).toBe(true);
   });
 
+  it('should subscribe to a screen share only after the viewer chooses to watch it', () => {
+    useMediaStore.getState().setScreenShareWatching('user_streamer', true);
+    expect(useMediaStore.getState().watchedScreenShares.user_streamer).toBe(true);
+    expect(useMediaStore.getState().focusedParticipant).toBe('user_streamer');
+
+    useMediaStore.getState().setScreenShareWatching('user_streamer', false);
+    expect(useMediaStore.getState().watchedScreenShares.user_streamer).toBeUndefined();
+    expect(useMediaStore.getState().focusedParticipant).toBeNull();
+  });
+
   it('should clean up participants and reset focus when user leaves voice', () => {
     vi.useFakeTimers();
     useMediaStore.setState({
@@ -137,5 +148,4 @@ describe('MediaStore', () => {
     vi.useRealTimers();
   });
 });
-
 

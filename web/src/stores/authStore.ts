@@ -247,6 +247,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const updatedUser = { ...get().user!, avatar_url: data.avatar_url };
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
         set({ user: updatedUser });
+        window.dispatchEvent(new CustomEvent('haven:profile-updated', {
+          detail: { user_id: updatedUser.id, username: updatedUser.username, avatar_url: data.avatar_url },
+        }));
       }
       return data.avatar_url as string;
     } catch (err: any) {
