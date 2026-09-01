@@ -11,11 +11,14 @@ describe('MediaStore', () => {
       isCameraOn: false,
       isScreenSharing: false,
       isNoiseSuppressionEnabled: true,
+      noiseSuppressionStatus: 'idle',
       isSpeaking: false,
       vadLevel: 0,
       participants: {},
       focusedParticipant: null,
       watchedScreenShares: {},
+      remoteAudioPreferences: {},
+      isCompanionModeEnabled: false,
     });
   });
 
@@ -28,10 +31,44 @@ describe('MediaStore', () => {
     expect(useMediaStore.getState().isMuted).toBe(true); // Deafen also mutes mic
   });
 
-  it('should toggle RNNoise noise suppression', () => {
+  it('should toggle DTLN AI noise suppression and its lifecycle status', () => {
     expect(useMediaStore.getState().isNoiseSuppressionEnabled).toBe(true);
     useMediaStore.getState().toggleNoiseSuppression();
     expect(useMediaStore.getState().isNoiseSuppressionEnabled).toBe(false);
+    expect(useMediaStore.getState().noiseSuppressionStatus).toBe('disabled');
+
+    useMediaStore.getState().toggleNoiseSuppression();
+    expect(useMediaStore.getState().noiseSuppressionStatus).toBe('idle');
+
+    useMediaStore.getState().setNoiseSuppressionStatus('active');
+    expect(useMediaStore.getState().noiseSuppressionStatus).toBe('active');
+  });
+
+  it('should keep voice and screen audio preferences local and independent', () => {
+    const store = useMediaStore.getState();
+
+    store.setRemoteAudioVolume('user_p1', 'voice', 35);
+    store.setRemoteAudioVolume('user_p1', 'screen', 72);
+    store.toggleRemoteAudioMuted('user_p1', 'voice');
+
+    expect(useMediaStore.getState().remoteAudioPreferences.user_p1).toEqual({
+      voiceVolume: 35,
+      voiceMuted: true,
+      screenVolume: 72,
+      screenMuted: false,
+    });
+
+    store.setRemoteAudioVolume('user_p1', 'voice', 150);
+    store.setRemoteAudioVolume('user_p1', 'screen', -10);
+    expect(useMediaStore.getState().remoteAudioPreferences.user_p1.voiceVolume).toBe(100);
+    expect(useMediaStore.getState().remoteAudioPreferences.user_p1.screenVolume).toBe(0);
+  });
+
+  it('should toggle nearby companion mode without changing the manual mute preference', () => {
+    expect(useMediaStore.getState().isMuted).toBe(false);
+    useMediaStore.getState().toggleCompanionMode();
+    expect(useMediaStore.getState().isCompanionModeEnabled).toBe(true);
+    expect(useMediaStore.getState().isMuted).toBe(false);
   });
 
   it('should add and update remote voice participants', () => {

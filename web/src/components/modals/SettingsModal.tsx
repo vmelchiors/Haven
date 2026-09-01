@@ -14,6 +14,7 @@ import {
   MessageSquarePlus,
   Download,
   BellRing,
+  Laptop2,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -48,8 +49,13 @@ export const SettingsModal: React.FC = () => {
   const loadAudioDevices = useSettingsStore((s) => s.loadAudioDevices);
 
   const isNoiseSuppressionEnabled = useMediaStore((s) => s.isNoiseSuppressionEnabled);
+  const noiseSuppressionStatus = useMediaStore((s) => s.noiseSuppressionStatus);
   const toggleNoiseSuppression = useMediaStore((s) => s.toggleNoiseSuppression);
   const vadLevel = useMediaStore((s) => s.vadLevel);
+  const isCompanionModeEnabled = useMediaStore((s) => s.isCompanionModeEnabled);
+  const toggleCompanionMode = useMediaStore((s) => s.toggleCompanionMode);
+  const effectiveNoiseSuppressionStatus = noiseSuppressionStatus
+    ?? (isNoiseSuppressionEnabled ? 'idle' : 'disabled');
 
   const logout = useAuthStore((s) => s.logout);
   const currentUser = useAuthStore((s) => s.user);
@@ -467,7 +473,20 @@ export const SettingsModal: React.FC = () => {
             <div className="bg-haven-card border border-haven-border rounded-xl p-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-haven-emerald" />
-                <span className="text-xs font-semibold text-zinc-200">Cancelamento de Ruído (RNNoise)</span>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-zinc-200">Foco de Voz por IA (DTLN)</span>
+                  <span className="text-[10px] text-zinc-500">
+                    {effectiveNoiseSuppressionStatus === 'active'
+                      ? 'Modelo neural ativo no microfone'
+                      : effectiveNoiseSuppressionStatus === 'loading'
+                      ? 'Carregando modelo neural...'
+                      : effectiveNoiseSuppressionStatus === 'fallback'
+                      ? 'Fallback nativo do navegador'
+                      : isNoiseSuppressionEnabled
+                      ? 'Será ativado ao entrar na chamada'
+                      : 'Desativado'}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
@@ -504,6 +523,35 @@ export const SettingsModal: React.FC = () => {
                 <div className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
                   callSoundsEnabled ? 'translate-x-4' : 'translate-x-0'
                 }`} />
+              </button>
+            </div>
+
+            {/* Nearby companion device: prevents feedback when another laptop handles room audio. */}
+            <div className="bg-haven-card border border-haven-border rounded-xl p-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Laptop2 className="w-4 h-4 text-haven-cyan" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-zinc-200">Dispositivo próximo (sem retorno)</span>
+                  <span className="text-[10px] text-zinc-500">
+                    {isCompanionModeEnabled
+                      ? 'Microfone e alto-falantes desativados neste aparelho'
+                      : 'Use nos notebooks secundários que estão na mesma sala'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={toggleCompanionMode}
+                className={`w-9 h-5 flex flex-shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                  isCompanionModeEnabled ? 'bg-haven-cyan' : 'bg-haven-border'
+                }`}
+                aria-label="Alternar modo de dispositivo próximo"
+              >
+                <div
+                  className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
+                    isCompanionModeEnabled ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
               </button>
             </div>
           </div>

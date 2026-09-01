@@ -11,6 +11,7 @@ import {
   AudioLines,
   Settings,
   PhoneOff,
+  Laptop2,
 } from 'lucide-react';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -22,8 +23,10 @@ export const ControlBar: React.FC = () => {
   const isCameraOn = useMediaStore((s) => s.isCameraOn);
   const isScreenSharing = useMediaStore((s) => s.isScreenSharing);
   const isNoiseSuppressionEnabled = useMediaStore((s) => s.isNoiseSuppressionEnabled);
+  const noiseSuppressionStatus = useMediaStore((s) => s.noiseSuppressionStatus);
   const vadLevel = useMediaStore((s) => s.vadLevel);
   const isSpeaking = useMediaStore((s) => s.isSpeaking);
+  const isCompanionModeEnabled = useMediaStore((s) => s.isCompanionModeEnabled);
   const isVoiceConnected = useMediaStore((s) => s.isVoiceConnected);
 
   const toggleMute = useMediaStore((s) => s.toggleMute);
@@ -31,6 +34,7 @@ export const ControlBar: React.FC = () => {
   const toggleCamera = useMediaStore((s) => s.toggleCamera);
   const toggleScreenShare = useMediaStore((s) => s.toggleScreenShare);
   const toggleNoiseSuppression = useMediaStore((s) => s.toggleNoiseSuppression);
+  const toggleCompanionMode = useMediaStore((s) => s.toggleCompanionMode);
   const disconnectVoice = useMediaStore((s) => s.disconnectVoice);
 
   const openModal = useSettingsStore((s) => s.openModal);
@@ -49,6 +53,15 @@ export const ControlBar: React.FC = () => {
     'w-11 h-11 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center border focus:outline-none focus-visible:ring-2 focus-visible:ring-haven-accent disabled:cursor-not-allowed disabled:opacity-35';
   const neutralButton =
     'bg-haven-surface/95 hover:bg-haven-surface-hover text-zinc-300 hover:text-white border-haven-border';
+  const effectiveNoiseSuppressionStatus = noiseSuppressionStatus
+    ?? (isNoiseSuppressionEnabled ? 'idle' : 'disabled');
+  const noiseSuppressionTitle = {
+    idle: 'IA pronta para iniciar ao entrar na chamada',
+    loading: 'Carregando modelo DTLN...',
+    active: 'Cancelamento de ruído por IA ativo',
+    fallback: 'IA indisponível; usando supressão nativa do navegador',
+    disabled: 'Cancelamento de ruído por IA desativado',
+  }[effectiveNoiseSuppressionStatus] ?? 'Status do cancelamento de ruído indisponível';
 
   return (
     <div className="absolute z-30 bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center haven-dock-enter">
@@ -70,18 +83,18 @@ export const ControlBar: React.FC = () => {
           <button
             type="button"
             onClick={() => runAction(isMuted ? 'Microfone ativado' : 'Microfone desativado', toggleMute)}
-            aria-label={isMuted ? 'Ativar microfone' : 'Desativar microfone'}
+            aria-label={isCompanionModeEnabled ? 'Microfone desativado pelo modo dispositivo próximo' : isMuted ? 'Ativar microfone' : 'Desativar microfone'}
             aria-pressed={isMuted}
             className={`${baseButton} ${
-              isMuted || isDeafened
+              isMuted || isDeafened || isCompanionModeEnabled
                 ? 'bg-haven-rose text-white border-red-400/30'
                 : isSpeaking
                 ? 'bg-haven-surface text-haven-emerald border-haven-emerald shadow-[0_0_18px_rgba(16,185,129,0.18)]'
                 : neutralButton
             }`}
-            title={isMuted ? 'Ativar microfone' : 'Desativar microfone'}
+            title={isCompanionModeEnabled ? 'Microfone desativado pelo modo dispositivo próximo' : isMuted ? 'Ativar microfone' : 'Desativar microfone'}
           >
-            {isMuted || isDeafened ? <MicOff className="w-[18px] h-[18px]" /> : <Mic className="w-[18px] h-[18px]" />}
+            {isMuted || isDeafened || isCompanionModeEnabled ? <MicOff className="w-[18px] h-[18px]" /> : <Mic className="w-[18px] h-[18px]" />}
           </button>
 
           <button
@@ -140,9 +153,23 @@ export const ControlBar: React.FC = () => {
                 ? 'bg-emerald-950/80 text-haven-emerald border-emerald-700/60'
                 : neutralButton
             }`}
-            title="Tratamento de voz"
+            title={noiseSuppressionTitle}
           >
             <AudioLines className="w-[18px] h-[18px]" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => runAction(
+              isCompanionModeEnabled ? 'Modo dispositivo próximo desativado' : 'Modo dispositivo próximo ativado',
+              toggleCompanionMode,
+            )}
+            aria-label={isCompanionModeEnabled ? 'Desativar modo dispositivo próximo' : 'Ativar modo dispositivo próximo'}
+            aria-pressed={isCompanionModeEnabled}
+            className={`${baseButton} ${isCompanionModeEnabled ? 'bg-haven-cyan text-white border-cyan-300/30' : neutralButton}`}
+            title={isCompanionModeEnabled ? 'Desativar modo dispositivo próximo' : 'Usar como dispositivo próximo sem áudio'}
+          >
+            <Laptop2 className="w-[18px] h-[18px]" />
           </button>
 
           <button

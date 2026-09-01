@@ -15,6 +15,7 @@ Disponível como **aplicativo desktop nativo** (Windows, macOS e Linux via Tauri
 
 - **Privacidade e Zero-PII:** Cadastro e uso sem coleta de e-mails, números de telefone ou documentos pessoais. Autenticação baseada em pseudônimo e hashing seguro com Argon2id/Bcrypt.
 - **Comunicação por Voz e Vídeo:** Canais de voz persistentes em segundo plano com detecção de atividade de voz (VAD), chamadas de vídeo e compartilhamento de tela.
+- **Foco de Voz por IA:** O microfone passa por um modelo DTLN quantizado executado localmente via WebAssembly e AudioWorklet antes de ser publicado no P2P ou LiveKit. Se a IA não carregar, a chamada continua com fallback automático.
 - **Arquitetura WebRTC Híbrida:** Suporte a conexões peer-to-peer (P2P Mesh) de baixa latência para grupos menores e escalabilidade com SFU (LiveKit).
 - **Chat de Texto em Tempo Real:** Troca de mensagens instantâneas com paginação por cursor, virtualização de lista para alto desempenho e indicadores de digitação.
 - **Gestão de Comunidades:** Criação de servidores públicos ou privados, controle de permissões e moderação de membros.
@@ -27,6 +28,7 @@ Disponível como **aplicativo desktop nativo** (Windows, macOS e Linux via Tauri
 - **Frontend Web:** React, TypeScript, Tailwind CSS, Vite.
 - **Desktop:** Tauri v2, Rust, React.
 - **Comunicação em Tempo Real:** WebRTC, LiveKit SFU.
+- **Realce de Fala:** [DTLN](https://github.com/breizhn/DTLN) via LiteRT/WASM, baseado no estudo [Dual-Signal Transformation LSTM Network for Real-Time Noise Suppression](https://www.isca-archive.org/interspeech_2020/westhausen20_interspeech.pdf).
 
 ---
 
