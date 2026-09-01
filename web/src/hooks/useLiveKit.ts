@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { ConnectionState, LocalParticipant, Participant, RemoteParticipant, RemoteTrack, RemoteTrackPublication, Room, RoomEvent, Track, TrackPublication, VideoPresets } from 'livekit-client';
 import { useAuthStore } from '../stores/authStore';
-import { useMediaStore } from '../stores/mediaStore';
+import { useMediaStore, type RemoteAudioSource } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import {
+  startNoiseSuppressionTransition,
+  type AINoiseSuppressionPipeline,
+} from '../lib/aiNoiseSuppression';
 
-const clampVolume = (volume: number) => Math.min(Math.max(volume / 100, 0), 1);
+interface RemoteAudioOutput {
+  element: HTMLAudioElement;
+  identity: string;
+  source: RemoteAudioSource;
+  trackSid?: string;
+}
 
 export function useLiveKit(_channelId?: string) {
   const roomRef = useRef<Room | null>(null);
-  const remoteAudiosRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const remoteAudiosRef = useRef<Map<string, RemoteAudioOutput>>(new Map());
   const activeVoiceChannel = useMediaStore((s) => s.activeVoiceChannel);
   const rtcToken = useMediaStore((s) => s.rtcToken);
   const rtcUrl = useMediaStore((s) => s.rtcUrl);
@@ -16,7 +25,11 @@ export function useLiveKit(_channelId?: string) {
   const isDeafened = useMediaStore((s) => s.isDeafened);
   const isCameraOn = useMediaStore((s) => s.isCameraOn);
   const isScreenSharing = useMediaStore((s) => s.isScreenSharing);
+  const isNoiseSuppressionEnabled = useMediaStore((s) => s.isNoiseSuppressionEnabled);
   const isPushToTalkActive = useMediaStore((s) => s.isPushToTalkActive);
+  const isCompanionModeEnabled = useMediaStore((s) => s.isCompanionModeEnabled);
+  const isVoiceConnected = useMediaStore((s) => s.isVoiceConnected);
+  const remoteAudioPreferences = useMediaStore((s) => s.remoteAudioPreferences);
   const voiceChannelMembers = useMediaStore((s) => s.voiceChannelMembers);
   const selectedInputDeviceId = useSettingsStore((s) => s.selectedInputDeviceId);
   const selectedOutputDeviceId = useSettingsStore((s) => s.selectedOutputDeviceId);
@@ -24,7 +37,11 @@ export function useLiveKit(_channelId?: string) {
   const isPttEnabled = useSettingsStore((s) => s.isPttEnabled);
   const currentUser = useAuthStore((s) => s.user);
   const upsertParticipant = useMediaStore((s) => s.upsertParticipant);
-  const isEffectivelyMuted = isMuted || isDeafened || (isPttEnabled && !isPushToTalkActive);
+  const setNoiseSuppressionStatus = useMediaStore((s) => s.setNoiseSuppressionStatus);
+  const isEffectivelyMuted = isMuted || isDeafened || isCompanionModeEnabled
+    || (isPttEnabled && !isPushToTalkActive);
+  const isEffectivelyMutedRef = useRef(isEffectivelyMuted);
+  isEffectivelyMutedRef.current = isEffectivelyMuted;
 
   // Presence must not depend on microphone/camera publication. A user belongs in the room UI
   // as soon as the voice-presence service reports that they joined.
@@ -52,13 +69,31 @@ export function useLiveKit(_channelId?: string) {
     }));
   }, [activeVoiceChannel?.id, currentUser?.id, voiceChannelMembers, isEffectivelyMuted, isDeafened, isCameraOn, isScreenSharing, upsertParticipant]);
 
+  const configureRemoteAudio = useCallback((output: RemoteAudioOutput) => {
+    const mediaState = useMediaStore.getState();
+    const preference = mediaState.remoteAudioPreferences[output.identity];
+    const individualVolume = output.source === 'voice'
+      ? preference?.voiceVolume ?? 100
+      : preference?.screenVolume ?? 100;
+    const locallyMuted = output.source === 'voice'
+      ? preference?.voiceMuted ?? false
+      : preference?.screenMuted ?? false;
+    output.element.volume = Math.min(Math.max(
+      (useSettingsStore.getState().outputVolume / 100) * (individualVolume / 100),
+      0,
+    ), 1);
+    output.element.muted = mediaState.isDeafened
+      || mediaState.isCompanionModeEnabled
+      || locallyMuted
+      || individualVolume === 0;
+  }, []);
+
   const removeRemoteAudio = useCallback((identity: string, trackSid?: string) => {
-    const prefix = `${identity}:`;
-    remoteAudiosRef.current.forEach((audio, key) => {
-      if (trackSid ? key !== `${prefix}${trackSid}` : !key.startsWith(prefix)) return;
-      audio.pause();
-      audio.srcObject = null;
-      audio.remove();
+    remoteAudiosRef.current.forEach((output, key) => {
+      if (output.identity !== identity || (trackSid && output.trackSid !== trackSid)) return;
+      output.element.pause();
+      output.element.srcObject = null;
+      output.element.remove();
       remoteAudiosRef.current.delete(key);
     });
   }, []);
@@ -92,23 +127,32 @@ export function useLiveKit(_channelId?: string) {
     });
   }, [upsertParticipant]);
 
-  const attachRemoteAudio = useCallback((track: RemoteTrack, participant: RemoteParticipant) => {
+  const attachRemoteAudio = useCallback((
+    track: RemoteTrack,
+    publication: RemoteTrackPublication,
+    participant: RemoteParticipant,
+  ) => {
     const key = `${participant.identity}:${track.sid}`;
     removeRemoteAudio(participant.identity, track.sid);
     const element = track.attach() as HTMLAudioElement;
     element.autoplay = true;
     element.setAttribute('playsinline', 'true');
     element.style.display = 'none';
-    element.muted = useMediaStore.getState().isDeafened;
-    element.volume = element.muted ? 0 : clampVolume(useSettingsStore.getState().outputVolume);
+    const output: RemoteAudioOutput = {
+      element,
+      identity: participant.identity,
+      source: publication.source === Track.Source.ScreenShareAudio ? 'screen' : 'voice',
+      trackSid: track.sid,
+    };
+    configureRemoteAudio(output);
     const outputId = useSettingsStore.getState().selectedOutputDeviceId;
     if (outputId && outputId !== 'default' && 'setSinkId' in element) {
       (element as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(outputId).catch(() => {});
     }
     document.body.appendChild(element);
-    remoteAudiosRef.current.set(key, element);
+    remoteAudiosRef.current.set(key, output);
     element.play().catch(() => {});
-  }, [removeRemoteAudio]);
+  }, [configureRemoteAudio, removeRemoteAudio]);
 
   // LiveKit is the single media transport; WebSocket only mirrors presence and control state.
   useEffect(() => {
@@ -137,8 +181,8 @@ export function useLiveKit(_channelId?: string) {
       // Voice presence owns membership/removal so brief RTC reconnects do not make users flicker.
       upsertParticipant({ identity: p.identity, isSpeaking: false, audioLevel: 0, cameraTrack: undefined, screenTrack: undefined });
     };
-    const trackSubscribed = (track: RemoteTrack, _pub: RemoteTrackPublication, p: RemoteParticipant) => {
-      if (track.kind === Track.Kind.Audio) attachRemoteAudio(track, p);
+    const trackSubscribed = (track: RemoteTrack, pub: RemoteTrackPublication, p: RemoteParticipant) => {
+      if (track.kind === Track.Kind.Audio) attachRemoteAudio(track, pub, p);
       syncRemoteParticipant(p);
     };
     const trackUnsubscribed = (track: RemoteTrack, _pub: RemoteTrackPublication, p: RemoteParticipant) => {
@@ -185,12 +229,6 @@ export function useLiveKit(_channelId?: string) {
         await room.switchActiveDevice('audioinput', selectedInputDeviceId).catch(() => false);
       }
       const state = useMediaStore.getState();
-      const settings = useSettingsStore.getState();
-      const shouldMute = state.isMuted || state.isDeafened || (settings.isPttEnabled && !state.isPushToTalkActive);
-      await room.localParticipant.setMicrophoneEnabled(!shouldMute, {
-        echoCancellation: true, noiseSuppression: true, autoGainControl: true,
-        deviceId: selectedInputDeviceId !== 'default' ? selectedInputDeviceId : undefined,
-      });
       if (state.isCameraOn) {
         await room.localParticipant.setCameraEnabled(true, { resolution: VideoPresets.h720.resolution, frameRate: 30 });
       }
@@ -223,26 +261,98 @@ export function useLiveKit(_channelId?: string) {
   }, [selectedInputDeviceId]);
 
   useEffect(() => {
-    remoteAudiosRef.current.forEach((audio) => {
-      audio.muted = isDeafened;
-      audio.volume = isDeafened ? 0 : clampVolume(outputVolume);
-      if (selectedOutputDeviceId && selectedOutputDeviceId !== 'default' && 'setSinkId' in audio) {
-        (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(selectedOutputDeviceId).catch(() => {});
+    remoteAudiosRef.current.forEach((output) => {
+      configureRemoteAudio(output);
+      if (selectedOutputDeviceId && selectedOutputDeviceId !== 'default' && 'setSinkId' in output.element) {
+        (output.element as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(selectedOutputDeviceId).catch(() => {});
       }
     });
-  }, [isDeafened, outputVolume, selectedOutputDeviceId]);
+  }, [isDeafened, isCompanionModeEnabled, outputVolume, selectedOutputDeviceId, remoteAudioPreferences, configureRemoteAudio]);
+
+  useEffect(() => {
+    const room = roomRef.current;
+    if (!room || !isVoiceConnected || room.state !== ConnectionState.Connected || isCompanionModeEnabled) {
+      setNoiseSuppressionStatus(isNoiseSuppressionEnabled ? 'idle' : 'disabled');
+      return;
+    }
+
+    const controller = new AbortController();
+    let rawStream: MediaStream | null = null;
+    let pipeline: AINoiseSuppressionPipeline | null = null;
+    let activeTrack: MediaStreamTrack | null = null;
+
+    const activateStream = async (stream: MediaStream) => {
+      if (controller.signal.aborted) return;
+      const track = stream.getAudioTracks()[0];
+      if (!track) return;
+      const existing = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      if (existing?.track?.mediaStreamTrack !== track) {
+        if (existing?.track) await room.localParticipant.unpublishTrack(existing.track, false);
+        const publication = await room.localParticipant.publishTrack(track, {
+          source: Track.Source.Microphone,
+          name: 'microphone-speech-enhanced',
+        });
+        if (isEffectivelyMutedRef.current) await publication.mute();
+      } else if (isEffectivelyMutedRef.current) {
+        await existing.mute();
+      } else {
+        await existing.unmute();
+      }
+      activeTrack = track;
+      syncLocalParticipant(room.localParticipant);
+    };
+
+    navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: !isNoiseSuppressionEnabled,
+        autoGainControl: true,
+        channelCount: 1,
+        deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined,
+      },
+      video: false,
+    }).then(async (stream) => {
+      if (controller.signal.aborted) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      rawStream = stream;
+      const transition = await startNoiseSuppressionTransition({
+        inputStream: stream,
+        enabled: isNoiseSuppressionEnabled,
+        signal: controller.signal,
+        activateStream,
+        setStatus: setNoiseSuppressionStatus,
+        onError: (error) => console.warn('[DTLN] Using native browser fallback:', error),
+      });
+      if (!transition || controller.signal.aborted) return;
+      pipeline = transition.pipeline;
+    }).catch((error) => {
+      if (controller.signal.aborted) return;
+      console.error('[Microfone] Não foi possível capturar o microfone:', error);
+      setNoiseSuppressionStatus(isNoiseSuppressionEnabled ? 'fallback' : 'disabled');
+      useMediaStore.setState({ isMuted: true });
+    });
+
+    return () => {
+      controller.abort();
+      const existing = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      if (existing?.track && existing.track.mediaStreamTrack === activeTrack) {
+        room.localParticipant.unpublishTrack(existing.track, false).catch(() => undefined);
+      }
+      pipeline?.dispose().catch(() => undefined);
+      rawStream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [isVoiceConnected, isCompanionModeEnabled, isNoiseSuppressionEnabled, selectedInputDeviceId, setNoiseSuppressionStatus, syncLocalParticipant]);
 
   useEffect(() => {
     const room = roomRef.current;
     if (!room || room.state !== ConnectionState.Connected) return;
-    room.localParticipant.setMicrophoneEnabled(!isEffectivelyMuted, {
-      echoCancellation: true, noiseSuppression: true, autoGainControl: true,
-      deviceId: selectedInputDeviceId !== 'default' ? selectedInputDeviceId : undefined,
-    }).then(() => syncLocalParticipant(room.localParticipant)).catch((error) => {
-      console.error('[Microfone] Não foi possível alterar o microfone:', error);
-      useMediaStore.setState({ isMuted: true });
-    });
-  }, [isEffectivelyMuted, selectedInputDeviceId, syncLocalParticipant]);
+    const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+    if (!publication) return;
+    const action = isEffectivelyMuted ? publication.mute() : publication.unmute();
+    action.then(() => syncLocalParticipant(room.localParticipant)).catch(() => undefined);
+  }, [isEffectivelyMuted, syncLocalParticipant]);
 
   useEffect(() => {
     const room = roomRef.current;

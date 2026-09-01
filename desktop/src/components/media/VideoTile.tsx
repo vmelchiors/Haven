@@ -4,6 +4,7 @@ import { VoiceParticipant } from '../../types';
 import { Avatar } from '../ui/Avatar';
 import { Track } from 'livekit-client';
 import { useAuthStore } from '../../stores/authStore';
+import { ParticipantAudioControls } from './ParticipantAudioControls';
 
 interface VideoTileProps {
   participant: VoiceParticipant;
@@ -119,6 +120,13 @@ export const VideoTile: React.FC<VideoTileProps> = ({
           : 'border-haven-border hover:border-zinc-500'
       } ${isFocused ? 'ring-2 ring-haven-accent' : ''}`}
     >
+      {!isLocal && (
+        <ParticipantAudioControls
+          identity={participant.identity}
+          hasScreenAudio={participant.isScreenSharing}
+          compact={compact}
+        />
+      )}
       {hasVideo && !compact ? (
         <video
           ref={videoRef}

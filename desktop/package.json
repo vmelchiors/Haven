@@ -12,10 +12,11 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.10.8",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
-    "@tanstack/react-virtual": "^3.10.8",
+    "@workadventure/noise-suppression": "^0.1.1",
     "clsx": "^2.1.1",
     "livekit-client": "^2.6.0",
     "lucide-react": "^0.453.0",
