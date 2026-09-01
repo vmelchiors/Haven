@@ -17,6 +17,7 @@ import { AuthView } from './components/auth/AuthView';
 // Features
 import { ChatArea } from './components/chat/ChatArea';
 import { VoiceRoom } from './components/media/VoiceRoom';
+import { VoiceChannelPreview } from './components/media/VoiceChannelPreview';
 
 // Modals
 import { ToSModal } from './components/modals/ToSModal';
@@ -98,7 +99,7 @@ export const App: React.FC = () => {
         ) : activeVoiceChannel ? (
           <VoiceRoom channel={activeVoiceChannel} />
         ) : selectedChannel && selectedChannel.type === 'VOICE' ? (
-          <VoiceRoom channel={selectedChannel} />
+          <VoiceChannelPreview channel={selectedChannel} />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-haven-darker">
             <div className="w-12 h-12 rounded-2xl bg-haven-accent text-white flex items-center justify-center mb-3 shadow-subtle">
@@ -174,3 +175,5 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+

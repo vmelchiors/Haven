@@ -14,7 +14,9 @@ export const ChannelSidebar: React.FC = () => {
   const selectChannel = useCommunityStore((s) => s.selectChannel);
   const unreadCounts = useChatStore((s) => s.unreadCounts);
 
-  const activeVoiceChannel = useMediaStore((s) => s.activeChannel);
+  const activeVoiceChannel = useMediaStore((s) => s.activeVoiceChannel);
+  const voiceConnectionState = useMediaStore((s) => s.voiceConnectionState);
+  const participantTransitions = useMediaStore((s) => s.participantTransitions);
   const connectVoice = useMediaStore((s) => s.connectVoice);
   const disconnectVoice = useMediaStore((s) => s.disconnectVoice);
   const voiceChannelMembers = useMediaStore((s) => s.voiceChannelMembers);
@@ -64,10 +66,7 @@ export const ChannelSidebar: React.FC = () => {
     selectChannel(channel);
 
     if (channel.type === 'VOICE') {
-      // Connect voice channel immediately in local state
-      connectVoice(channel);
-
-      // Fetch LiveKit RTC Token if available
+      // Only enter the room after obtaining valid SFU credentials.
       const tokens = useAuthStore.getState().tokens;
       if (!tokens) return;
 
@@ -80,9 +79,11 @@ export const ChannelSidebar: React.FC = () => {
         if (res.ok) {
           const rtcData = await res.json();
           connectVoice(channel, rtcData.token, rtcData.url, rtcData.room_name);
+        } else {
+          console.error('[Voice] Não foi possível obter acesso à sala:', res.status);
         }
-      } catch {
-        // Fallback to local mode
+      } catch (error) {
+        console.error('[Voice] Não foi possível entrar na sala:', error);
       }
     }
   };
@@ -237,7 +238,13 @@ export const ChannelSidebar: React.FC = () => {
                       {channelMembers.map((m) => (
                         <div
                           key={m.user_id}
-                          className="flex items-center justify-between text-xs text-zinc-300 py-0.5 px-2 rounded hover:bg-haven-surface/40"
+                          className={`flex items-center justify-between text-xs text-zinc-300 py-0.5 px-2 rounded hover:bg-haven-surface/40 transition-all duration-200 ${
+                            participantTransitions[m.user_id] === 'entering'
+                              ? 'animate-scale-up bg-haven-emerald/5'
+                              : participantTransitions[m.user_id] === 'leaving'
+                              ? 'opacity-0 -translate-x-2'
+                              : 'opacity-100 translate-x-0'
+                          }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <Avatar name={m.username} size="xs" isSpeaking={m.is_speaking} />
@@ -274,10 +281,15 @@ export const ChannelSidebar: React.FC = () => {
             onClick={() => selectChannel(activeVoiceChannel)}
             className="flex items-center gap-2 min-w-0 text-left cursor-pointer group"
           >
-            <div className="w-2 h-2 rounded-full bg-haven-emerald animate-pulse flex-shrink-0" />
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              voiceConnectionState === 'connected' ? 'bg-haven-emerald' :
+              voiceConnectionState === 'error' ? 'bg-haven-rose' : 'bg-haven-amber animate-pulse'
+            }`} />
             <div className="min-w-0">
               <div className="text-[10px] font-semibold text-haven-emerald group-hover:underline truncate">
-                Voz Conectada
+                {voiceConnectionState === 'connected' ? 'Voz conectada' :
+                 voiceConnectionState === 'reconnecting' ? 'Reconectando…' :
+                 voiceConnectionState === 'error' ? 'Falha na conexão' : 'Conectando…'}
               </div>
               <div className="text-[10px] text-zinc-400 truncate">
                 {activeVoiceChannel.name}
@@ -296,8 +308,8 @@ export const ChannelSidebar: React.FC = () => {
       )}
 
       {/* User Status Bottom Dock */}
-      <div className="h-13 bg-haven-darker border-t border-haven-border px-2.5 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="min-h-[64px] bg-haven-darker border-t border-haven-border px-3 py-2 flex items-center justify-between gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0 py-0.5">
           <Avatar
             src={user?.avatar_url}
             name={user?.username || 'User'}
@@ -315,7 +327,7 @@ export const ChannelSidebar: React.FC = () => {
         </div>
 
         {/* Quick controls */}
-        <div className="flex items-center gap-0.5 text-zinc-400">
+        <div className="flex items-center gap-1 text-zinc-400 flex-shrink-0">
           <button
             onClick={toggleMute}
             className={`p-1.5 rounded hover:bg-haven-surface transition-colors cursor-pointer ${
@@ -353,3 +365,5 @@ export const ChannelSidebar: React.FC = () => {
     </aside>
   );
 };
+
+
