@@ -25,6 +25,7 @@ interface CommunityState {
   createChannel: (communityId: string, name: string, type: ChannelType) => Promise<Channel | null>;
   deleteCommunity: (communityId: string) => Promise<boolean>;
   deleteChannel: (channelId: string) => Promise<boolean>;
+  updateMemberProfile: (userId: string, username: string, avatarUrl: string) => void;
 }
 
 export const useCommunityStore = create<CommunityState>((set, get) => ({
@@ -35,6 +36,12 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
   members: [],
   isLoading: false,
   error: null,
+
+  updateMemberProfile: (userId, username, avatarUrl) => set((state) => ({
+    members: state.members.map((member) => member.id === userId
+      ? { ...member, username: username || member.username, avatar_url: avatarUrl || member.avatar_url }
+      : member),
+  })),
 
   fetchCommunities: async () => {
     const tokens = useAuthStore.getState().tokens;

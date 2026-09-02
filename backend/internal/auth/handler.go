@@ -279,6 +279,12 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 // UploadAvatar processes and stores an avatar image
 func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(UserContextKey).(*Claims)
+	if !ok || claims == nil {
+		httpError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	// 2 MB max upload limit in multipart reader
 	if err := r.ParseMultipartForm(avatar.MaxAvatarSizeBytes); err != nil {
 		httpError(w, "file too large or invalid multipart form (max 2MB)", http.StatusBadRequest)
@@ -295,6 +301,11 @@ func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	avatarURL, err := avatar.ProcessAvatar(file, h.cfg.UploadDir, header.Filename)
 	if err != nil {
 		httpError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.service.UpdateAvatar(claims.UserID, avatarURL); err != nil {
+		httpError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

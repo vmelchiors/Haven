@@ -22,7 +22,9 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const focusedParticipant = useMediaStore((s) => s.focusedParticipant);
   const participantTransitions = useMediaStore((s) => s.participantTransitions);
+  const watchedScreenShares = useMediaStore((s) => s.watchedScreenShares);
   const setFocusedParticipant = useMediaStore((s) => s.setFocusedParticipant);
+  const setScreenShareWatching = useMediaStore((s) => s.setScreenShareWatching);
 
   // Strictly filter participants to only active channel members + current user
   const participants = useMemo(() => {
@@ -40,7 +42,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
 
     participants.forEach((p) => {
       // 1. Screen sharing stream
-      if (p.isScreenSharing) {
+      if (p.isScreenSharing && (p.identity === currentUserId || watchedScreenShares[p.identity])) {
         list.push({
           id: `${p.identity}-screen`,
           participantId: p.identity,
@@ -74,7 +76,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
     }
 
     return list;
-  }, [participants, focusedParticipant]);
+  }, [participants, focusedParticipant, currentUserId, watchedScreenShares]);
 
   if (participants.length === 0) {
     return (
@@ -88,69 +90,54 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
     );
   }
 
-  // Active Streams Layout: Main Stage on Top + Bottom Filmstrip
+  // Active media uses a focused stage with a compact participant rail.
   if (streamTiles.length > 0) {
-    // Grid columns for top stage based on number of active streams
-    const getStreamGridClass = (count: number) => {
-      if (count === 1) return 'grid-cols-1 max-w-5xl';
-      if (count === 2) return 'grid-cols-1 md:grid-cols-2 max-w-7xl';
-      if (count <= 4) return 'grid-cols-1 sm:grid-cols-2 max-w-7xl';
-      return 'grid-cols-2 md:grid-cols-3 max-w-7xl';
-    };
+    const primaryStream =
+      streamTiles.find((stream) => stream.participantId === focusedParticipant && stream.isScreenShare) ||
+      streamTiles.find((stream) => stream.participantId === focusedParticipant) ||
+      streamTiles.find((stream) => stream.isScreenShare) ||
+      streamTiles[0];
+    const primaryParticipant = participantsMap[primaryStream.participantId]!;
 
     return (
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-haven-darkest/95">
-        {/* TOP MAIN STAGE: Active Streams (Auto-split if multiple) */}
-        <div className="flex-1 min-h-0 p-3 md:p-4 flex items-center justify-center overflow-hidden">
-          <div
-            className={`grid gap-3 w-full h-full max-h-full items-center justify-center ${getStreamGridClass(
-              streamTiles.length
-            )}`}
-          >
-            {streamTiles.map((stream) => {
-              const participant = participantsMap[stream.participantId];
-              if (!participant) return null;
-
-              return (
-                <div key={stream.id} className={`w-full h-full min-h-0 flex items-center justify-center transition-all duration-200 ${participantTransitions[participant.identity] === 'leaving' ? 'opacity-0 scale-95' : 'animate-scale-up'}`}>
-                  <VideoTile
-                    participant={participant}
-                    isScreenShare={stream.isScreenShare}
-                    isCamera={stream.isCamera}
-                    isFocused={true}
-                    onVisibilityChange={(src, visible) =>
-                      onVisibilityChange?.(participant.identity, src, visible)
-                    }
-                    onClick={() => {
-                      if (focusedParticipant === participant.identity) {
-                        setFocusedParticipant(null);
-                      }
-                    }}
-                  />
-                </div>
-              );
-            })}
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-3 p-3 md:p-4 pb-24 overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(88,101,242,0.08),_transparent_42%)]">
+        <div className="flex-1 min-w-0 min-h-[220px] flex items-center justify-center overflow-hidden">
+          <div className="w-full h-full max-w-7xl haven-stage-enter">
+            <VideoTile
+              participant={primaryParticipant}
+              isScreenShare={primaryStream.isScreenShare}
+              isCamera={primaryStream.isCamera}
+              isFocused
+              onVisibilityChange={(src, visible) => onVisibilityChange?.(primaryParticipant.identity, src, visible)}
+              onStopWatching={primaryStream.isScreenShare && primaryParticipant.identity !== currentUserId
+                ? () => setScreenShareWatching(primaryParticipant.identity, false)
+                : undefined}
+              onClick={() => setFocusedParticipant(null)}
+            />
           </div>
         </div>
 
-        {/* BOTTOM FILMSTRIP: All Voice Channel Participants */}
-        <div className="h-32 md:h-36 flex-shrink-0 border-t border-haven-border/60 bg-haven-darker/80 px-3 py-2 flex items-center gap-2.5 overflow-x-auto scrollbar-thin">
+        <aside className="h-28 md:h-auto md:w-52 lg:w-56 flex-shrink-0 flex md:flex-col gap-2.5 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden scrollbar-thin" aria-label="Participantes na chamada">
           {participants.map((p) => {
             const isCurrentlyFocused = focusedParticipant === p.identity;
+            const isRemoteBroadcastAvailable = p.identity !== currentUserId && p.isScreenSharing && !watchedScreenShares[p.identity];
+            const isWatchingScreen = p.isScreenSharing && (p.identity === currentUserId || Boolean(watchedScreenShares[p.identity]));
             return (
               <div
                 key={p.identity}
-                className={`h-full w-40 md:w-48 flex-shrink-0 cursor-pointer transition-all duration-200 ${participantTransitions[p.identity] === 'leaving' ? 'opacity-0 scale-95' : participantTransitions[p.identity] === 'entering' ? 'animate-scale-up' : ''}`}
+                className={`h-full md:h-28 w-40 md:w-full flex-shrink-0 cursor-pointer transition-all duration-200 ${participantTransitions[p.identity] === 'leaving' ? 'haven-participant-leave' : participantTransitions[p.identity] === 'entering' ? 'haven-participant-enter' : ''}`}
                 onClick={() => {
                   setFocusedParticipant(isCurrentlyFocused ? null : p.identity);
                 }}
               >
                 <VideoTile
                   participant={p}
-                  isScreenShare={p.isScreenSharing}
-                  isCamera={p.isCameraOn}
+                  isScreenShare={isWatchingScreen}
+                  isCamera={!isWatchingScreen && p.isCameraOn}
                   compact={true}
                   isFocused={isCurrentlyFocused}
+                  showWatchPrompt={isRemoteBroadcastAvailable}
+                  onWatchScreenShare={() => setScreenShareWatching(p.identity, true)}
                   onVisibilityChange={(src, visible) =>
                     onVisibilityChange?.(p.identity, src, visible)
                   }
@@ -158,7 +145,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
               </div>
             );
           })}
-        </div>
+        </aside>
       </div>
     );
   }
@@ -173,18 +160,20 @@ export const VideoGrid: React.FC<VideoGridProps> = ({ onVisibilityChange }) => {
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center p-6 overflow-auto bg-haven-darkest/95">
+    <div className="flex-1 flex items-center justify-center p-4 md:p-8 pb-28 overflow-auto bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.06),_transparent_46%)]">
       <div
-        className={`grid gap-4 w-full h-full max-h-full items-center justify-center ${getVoiceGridCols(
+        className={`grid gap-4 w-full max-h-full items-center justify-center ${getVoiceGridCols(
           participants.length
         )}`}
       >
         {participants.map((p) => (
-          <div key={p.identity} className={`w-full h-full min-h-[160px] aspect-video transition-all duration-200 ${participantTransitions[p.identity] === 'leaving' ? 'opacity-0 scale-95' : participantTransitions[p.identity] === 'entering' ? 'animate-scale-up' : ''}`}>
+          <div key={p.identity} className={`w-full min-h-[150px] h-[clamp(160px,24vh,240px)] transition-all duration-200 ${participantTransitions[p.identity] === 'leaving' ? 'haven-participant-leave' : participantTransitions[p.identity] === 'entering' ? 'haven-participant-enter' : ''}`}>
             <VideoTile
               participant={p}
-              isScreenShare={p.isScreenSharing}
+              isScreenShare={p.isScreenSharing && (p.identity === currentUserId || Boolean(watchedScreenShares[p.identity]))}
               isCamera={p.isCameraOn}
+              showWatchPrompt={p.identity !== currentUserId && p.isScreenSharing && !watchedScreenShares[p.identity]}
+              onWatchScreenShare={() => setScreenShareWatching(p.identity, true)}
               onVisibilityChange={(src, visible) => onVisibilityChange?.(p.identity, src, visible)}
               onClick={() => setFocusedParticipant(focusedParticipant === p.identity ? null : p.identity)}
             />

@@ -8,6 +8,10 @@ import {
   type AINoiseSuppressionPipeline,
 } from '../lib/aiNoiseSuppression';
 
+const clampVolume = (volume: number) => Math.min(Math.max(volume / 100, 0), 1);
+const isScreenShareSource = (source?: Track.Source) =>
+  source === Track.Source.ScreenShare || source === Track.Source.ScreenShareAudio;
+
 interface RemoteAudioOutput {
   element: HTMLAudioElement;
   identity: string;
@@ -25,6 +29,7 @@ export function useLiveKit(_channelId?: string) {
   const isDeafened = useMediaStore((s) => s.isDeafened);
   const isCameraOn = useMediaStore((s) => s.isCameraOn);
   const isScreenSharing = useMediaStore((s) => s.isScreenSharing);
+  const watchedScreenShares = useMediaStore((s) => s.watchedScreenShares);
   const isNoiseSuppressionEnabled = useMediaStore((s) => s.isNoiseSuppressionEnabled);
   const isPushToTalkActive = useMediaStore((s) => s.isPushToTalkActive);
   const isCompanionModeEnabled = useMediaStore((s) => s.isCompanionModeEnabled);
@@ -105,8 +110,8 @@ export function useLiveKit(_channelId?: string) {
     upsertParticipant({
       identity: currentUser.id, name: currentUser.username,
       isSpeaking: participant.isSpeaking, isMuted: isEffectivelyMuted, isDeafened,
-      isCameraOn: Boolean(camera?.track && !camera.isMuted),
-      isScreenSharing: Boolean(screen?.track && !screen.isMuted),
+      isCameraOn: Boolean(camera && !camera.isMuted),
+      isScreenSharing: Boolean(screen && !screen.isMuted),
       audioLevel: participant.audioLevel,
       cameraTrack: camera?.track?.mediaStreamTrack,
       screenTrack: screen?.track?.mediaStreamTrack,
@@ -175,7 +180,15 @@ export function useLiveKit(_channelId?: string) {
     const markDisconnected = () => { if (!disposed) useMediaStore.setState({ isVoiceConnected: false, voiceConnectionState: 'disconnected' }); };
     const markReconnecting = () => { if (!disposed) useMediaStore.setState({ isVoiceConnected: false, voiceConnectionState: 'reconnecting' }); };
     const markConnected = () => { if (!disposed) useMediaStore.setState({ isVoiceConnected: true, voiceConnectionState: 'connected' }); };
-    const participantConnected = (p: RemoteParticipant) => syncRemoteParticipant(p);
+    const configureRemotePublication = (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      const shouldSubscribe = !isScreenShareSource(publication.source) ||
+        Boolean(useMediaStore.getState().watchedScreenShares[participant.identity]);
+      publication.setSubscribed(shouldSubscribe);
+    };
+    const participantConnected = (p: RemoteParticipant) => {
+      p.trackPublications.forEach((publication) => configureRemotePublication(publication, p));
+      syncRemoteParticipant(p);
+    };
     const participantDisconnected = (p: RemoteParticipant) => {
       removeRemoteAudio(p.identity);
       // Voice presence owns membership/removal so brief RTC reconnects do not make users flicker.
@@ -193,6 +206,16 @@ export function useLiveKit(_channelId?: string) {
       const remote = room.remoteParticipants.get(participant.identity);
       if (remote) syncRemoteParticipant(remote);
       else syncLocalParticipant(room.localParticipant);
+    };
+    const trackPublished = (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      configureRemotePublication(publication, participant);
+      syncRemoteParticipant(participant);
+    };
+    const trackUnpublished = (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      if (publication.source === Track.Source.ScreenShare) {
+        useMediaStore.getState().setScreenShareWatching(participant.identity, false);
+      }
+      syncRemoteParticipant(participant);
     };
     const speakersChanged = (speakers: Participant[]) => {
       const active = new Map(speakers.map((speaker) => [speaker.identity, speaker.audioLevel]));
@@ -212,6 +235,8 @@ export function useLiveKit(_channelId?: string) {
     room.on(RoomEvent.ParticipantDisconnected, participantDisconnected);
     room.on(RoomEvent.TrackSubscribed, trackSubscribed);
     room.on(RoomEvent.TrackUnsubscribed, trackUnsubscribed);
+    room.on(RoomEvent.TrackPublished, trackPublished);
+    room.on(RoomEvent.TrackUnpublished, trackUnpublished);
     room.on(RoomEvent.TrackMuted, trackChanged);
     room.on(RoomEvent.TrackUnmuted, trackChanged);
     room.on(RoomEvent.ActiveSpeakersChanged, speakersChanged);
@@ -221,9 +246,12 @@ export function useLiveKit(_channelId?: string) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       connectUrl = `${protocol}//${window.location.host}${connectUrl}`;
     }
-    room.connect(connectUrl, rtcToken).then(async () => {
+    room.connect(connectUrl, rtcToken, { autoSubscribe: false }).then(async () => {
       if (disposed) return;
-      room.remoteParticipants.forEach(syncRemoteParticipant);
+      room.remoteParticipants.forEach((participant) => {
+        participant.trackPublications.forEach((publication) => configureRemotePublication(publication, participant));
+        syncRemoteParticipant(participant);
+      });
       syncLocalParticipant(room.localParticipant);
       if (selectedInputDeviceId && selectedInputDeviceId !== 'default') {
         await room.switchActiveDevice('audioinput', selectedInputDeviceId).catch(() => false);
@@ -380,9 +408,27 @@ export function useLiveKit(_channelId?: string) {
     });
   }, [isScreenSharing, syncLocalParticipant]);
 
+  useEffect(() => {
+    const room = roomRef.current;
+    if (!room || room.state !== ConnectionState.Connected) return;
+    room.remoteParticipants.forEach((participant) => {
+      participant.trackPublications.forEach((publication) => {
+        if (isScreenShareSource(publication.source)) {
+          publication.setSubscribed(Boolean(watchedScreenShares[participant.identity]));
+        }
+      });
+      syncRemoteParticipant(participant);
+    });
+  }, [watchedScreenShares, syncRemoteParticipant]);
+
   const setTrackVisible = useCallback((identity: string, source: Track.Source, visible: boolean) => {
     const publication = roomRef.current?.remoteParticipants.get(identity)?.getTrackPublication(source);
-    if (publication instanceof RemoteTrackPublication) publication.setSubscribed(visible);
+    if (publication instanceof RemoteTrackPublication) {
+      const shouldSubscribe = source === Track.Source.ScreenShare
+        ? visible && Boolean(useMediaStore.getState().watchedScreenShares[identity])
+        : visible;
+      publication.setSubscribed(shouldSubscribe);
+    }
   }, []);
   return { room: roomRef.current, setTrackVisible };
 }

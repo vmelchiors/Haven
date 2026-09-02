@@ -1,7 +1,8 @@
 import { useEffect, useCallback } from 'react';
-import { useAuthStore } from '../stores/authStore';
+import { STORAGE_KEY_USER, useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { useMediaStore } from '../stores/mediaStore';
+import { useCommunityStore } from '../stores/communityStore';
 import { WSMessage, Message, VoiceChannelUser } from '../types';
 
 let socket: WebSocket | null = null;
@@ -107,6 +108,22 @@ function setupWebSocket(accessToken: string) {
                 setPresence(user_id, status, username);
               }
               break;
+            case 'user_profile_updated':
+              if (msg.payload) {
+                const { user_id, username, avatar_url } = msg.payload;
+                if (!user_id || !avatar_url) break;
+                useCommunityStore.getState().updateMemberProfile(user_id, username, avatar_url);
+                useChatStore.getState().updateUserProfile(user_id, username, avatar_url);
+                useMediaStore.getState().updateParticipant(user_id, { name: username });
+
+                const currentUser = useAuthStore.getState().user;
+                if (currentUser && currentUser.id === user_id) {
+                  const updatedUser = { ...currentUser, username: username || currentUser.username, avatar_url };
+                  localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
+                  useAuthStore.setState({ user: updatedUser });
+                }
+              }
+              break;
             case 'voice_snapshot':
               if (msg.payload && Array.isArray(msg.payload)) {
                 useMediaStore.getState().setVoiceSnapshot(msg.payload);
@@ -192,6 +209,16 @@ export function useWebSocket() {
       isConnecting = false;
     }
   }, [isAuthenticated, tokens?.access_token]);
+
+  useEffect(() => {
+    const forwardProfileUpdate = (event: Event) => {
+      const profile = (event as CustomEvent).detail;
+      if (!profile?.avatar_url) return;
+      sendWebSocketMessage({ type: 'user_profile_updated', payload: profile });
+    };
+    window.addEventListener('haven:profile-updated', forwardProfileUpdate);
+    return () => window.removeEventListener('haven:profile-updated', forwardProfileUpdate);
+  }, []);
 
   const sendChatMessage = useCallback((channelId: string, content: string) => {
     sendWebSocketMessage({

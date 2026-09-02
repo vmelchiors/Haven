@@ -34,6 +34,7 @@ interface MediaState {
   vadLevel: number;
   isSpeaking: boolean;
   focusedParticipant: string | null;
+  watchedScreenShares: Record<string, boolean>;
   remoteAudioPreferences: Record<string, RemoteAudioPreference>;
   isCompanionModeEnabled: boolean;
 
@@ -54,6 +55,7 @@ interface MediaState {
   setPushToTalkActive: (active: boolean) => void;
   setVadLevel: (level: number, speaking: boolean) => void;
   setFocusedParticipant: (identity: string | null) => void;
+  setScreenShareWatching: (identity: string, watching: boolean) => void;
   setRemoteAudioVolume: (identity: string, source: RemoteAudioSource, volume: number) => void;
   toggleRemoteAudioMuted: (identity: string, source: RemoteAudioSource) => void;
   toggleCompanionMode: () => void;
@@ -87,6 +89,7 @@ export const useMediaStore = create<MediaState>((set) => ({
   vadLevel: 0,
   isSpeaking: false,
   focusedParticipant: null,
+  watchedScreenShares: {},
   remoteAudioPreferences: {},
   isCompanionModeEnabled: false,
 
@@ -173,6 +176,8 @@ export const useMediaStore = create<MediaState>((set) => ({
       delete newParticipants[userId];
       const nextTransitions = { ...state.participantTransitions };
       delete nextTransitions[userId];
+      const watchedScreenShares = { ...state.watchedScreenShares };
+      delete watchedScreenShares[userId];
 
       return {
         voiceChannelMembers: {
@@ -181,6 +186,7 @@ export const useMediaStore = create<MediaState>((set) => ({
         },
         participants: newParticipants,
         focusedParticipant: state.focusedParticipant === userId ? null : state.focusedParticipant,
+        watchedScreenShares,
         participantTransitions: nextTransitions,
       };
     });
@@ -195,6 +201,8 @@ export const useMediaStore = create<MediaState>((set) => ({
         ? existing.map((u) => (u.user_id === user.user_id ? { ...u, ...user } : u))
         : [...existing, user];
       const newParticipants = { ...state.participants };
+      const watchedScreenShares = { ...state.watchedScreenShares };
+      if (user.is_screen_sharing === false) delete watchedScreenShares[user.user_id];
       if (state.activeVoiceChannel?.id === user.channel_id && newParticipants[user.user_id]) {
         const p = newParticipants[user.user_id];
         const isCameraOn = user.is_camera_on !== undefined ? Boolean(user.is_camera_on) : p.isCameraOn;
@@ -218,6 +226,7 @@ export const useMediaStore = create<MediaState>((set) => ({
           [user.channel_id]: updated,
         },
         participants: newParticipants,
+        watchedScreenShares,
       };
     });
   },
@@ -281,6 +290,7 @@ export const useMediaStore = create<MediaState>((set) => ({
           [channel.id]: userList,
         },
         participants: s.activeVoiceChannel?.id === channel.id ? s.participants : {},
+        watchedScreenShares: s.activeVoiceChannel?.id === channel.id ? s.watchedScreenShares : {},
         participantTransitions: {},
       };
     });
@@ -320,6 +330,7 @@ export const useMediaStore = create<MediaState>((set) => ({
         isCameraOn: false,
         isScreenSharing: false,
         focusedParticipant: null,
+        watchedScreenShares: {},
         participantTransitions: {},
       };
     });
@@ -440,6 +451,16 @@ export const useMediaStore = create<MediaState>((set) => ({
       return { vadLevel: level, isSpeaking };
     }),
   setFocusedParticipant: (identity) => set({ focusedParticipant: identity }),
+  setScreenShareWatching: (identity, watching) =>
+    set((state) => {
+      const watchedScreenShares = { ...state.watchedScreenShares };
+      if (watching) watchedScreenShares[identity] = true;
+      else delete watchedScreenShares[identity];
+      return {
+        watchedScreenShares,
+        focusedParticipant: watching ? identity : state.focusedParticipant === identity ? null : state.focusedParticipant,
+      };
+    }),
   setRemoteAudioVolume: (identity, source, volume) =>
     set((state) => {
       const current = state.remoteAudioPreferences[identity] || {
@@ -616,5 +637,3 @@ export const useMediaStore = create<MediaState>((set) => ({
 
   resetParticipants: () => set({ participants: {} }),
 }));
-
-

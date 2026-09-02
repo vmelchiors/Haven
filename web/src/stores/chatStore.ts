@@ -17,6 +17,7 @@ interface ChatState {
   markChannelAsRead: (channelId: string) => void;
   setTyping: (channelId: string, userId: string, username: string, isTyping: boolean) => void;
   setPresence: (userId: string, status: PresenceStatus, username?: string) => void;
+  updateUserProfile: (userId: string, username: string, avatarUrl: string) => void;
   clearChannelMessages: (channelId: string) => void;
 }
 
@@ -179,6 +180,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
   },
+
+  updateUserProfile: (userId, username, avatarUrl) => set((state) => {
+    const presence = { ...state.presence };
+    if (presence[userId]) {
+      presence[userId] = {
+        ...presence[userId],
+        username: username || presence[userId].username,
+        avatar_url: avatarUrl || presence[userId].avatar_url,
+      };
+    }
+
+    const messages = Object.fromEntries(
+      Object.entries(state.messages).map(([channelId, channelMessages]) => [
+        channelId,
+        channelMessages.map((message) => message.user_id === userId
+          ? { ...message, username: username || message.username, avatar_url: avatarUrl || message.avatar_url }
+          : message),
+      ]),
+    );
+    return { presence, messages };
+  }),
 
   clearChannelMessages: (channelId) => {
     set((state) => {

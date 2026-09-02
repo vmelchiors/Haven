@@ -18,6 +18,7 @@ interface SettingsState {
   pttKey: string;
   isPttEnabled: boolean;
   isPushToTalkActive: boolean;
+  callSoundsEnabled: boolean;
 
   openModal: (modal: ModalType, channelType?: ChannelType) => void;
   closeModal: () => void;
@@ -29,6 +30,7 @@ interface SettingsState {
   setPttKey: (key: string) => void;
   setPttEnabled: (enabled: boolean) => void;
   setPushToTalkActive: (active: boolean) => void;
+  setCallSoundsEnabled: (enabled: boolean) => void;
   loadAudioDevices: () => Promise<void>;
 }
 
@@ -47,6 +49,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   pttKey: 'Control+Space',
   isPttEnabled: false,
   isPushToTalkActive: false,
+  callSoundsEnabled: typeof localStorage === 'undefined' ? true : localStorage.getItem('haven_call_sounds') !== 'false',
 
   openModal: (modal, channelType = 'TEXT') => set({ activeModal: modal, createChannelType: channelType }),
   closeModal: () => set({ activeModal: null }),
@@ -59,6 +62,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setPttKey: (key) => set({ pttKey: key }),
   setPttEnabled: (enabled) => set({ isPttEnabled: enabled }),
   setPushToTalkActive: (active) => set({ isPushToTalkActive: active }),
+  setCallSoundsEnabled: (enabled) => {
+    if (typeof localStorage !== 'undefined') localStorage.setItem('haven_call_sounds', String(enabled));
+    set({ callSoundsEnabled: enabled });
+  },
 
   loadAudioDevices: async () => {
     try {
