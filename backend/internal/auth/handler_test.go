@@ -20,6 +20,18 @@ import (
 	"image/png"
 )
 
+type profileUpdateNotifierSpy struct {
+	userID    string
+	username  string
+	avatarURL string
+}
+
+func (s *profileUpdateNotifierSpy) NotifyUserProfileUpdated(userID, username, avatarURL string) {
+	s.userID = userID
+	s.username = username
+	s.avatarURL = avatarURL
+}
+
 func createSamplePNG(width, height int) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for x := 0; x < width; x++ {
@@ -178,6 +190,8 @@ func TestAuthHandler_GetMeAndAcceptToS(t *testing.T) {
 func TestAuthHandler_UploadAvatar(t *testing.T) {
 	handler, db, _, cleanup := setupHandlerTestEnv(t)
 	defer cleanup()
+	notifier := &profileUpdateNotifierSpy{}
+	handler.SetProfileUpdateNotifier(notifier)
 
 	regPayload := map[string]string{
 		"username": "avatar-user",
@@ -226,6 +240,12 @@ func TestAuthHandler_UploadAvatar(t *testing.T) {
 	}
 	if storedAvatar != res["avatar_url"] {
 		t.Fatalf("expected persisted avatar %q, got %q", res["avatar_url"], storedAvatar)
+	}
+	if notifier.userID != regResp.User.ID || notifier.username != regResp.User.Username {
+		t.Fatalf("expected authoritative profile notification for %s, got user=%s username=%s", regResp.User.ID, notifier.userID, notifier.username)
+	}
+	if notifier.avatarURL != res["avatar_url"] {
+		t.Fatalf("expected notified avatar %q, got %q", res["avatar_url"], notifier.avatarURL)
 	}
 }
 

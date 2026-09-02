@@ -152,7 +152,9 @@ export const VideoTile: React.FC<VideoTileProps> = ({
             name={participant.name}
             size={compact ? 'md' : 'xl'}
             isSpeaking={participant.isSpeaking}
-            className={compact ? 'w-11 h-11 text-xs rounded-xl' : 'w-20 h-20 text-xl rounded-2xl shadow-subtle'}
+            className={compact
+              ? 'w-11 h-11 text-xs rounded-full ring-1 ring-white/10'
+              : 'w-20 h-20 text-xl rounded-full ring-1 ring-white/10 shadow-subtle'}
           />
         </div>
       )}
@@ -210,15 +212,16 @@ export const VideoTile: React.FC<VideoTileProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
-          {participant.isDeafened ? (
+          {participant.isDeafened && (
             <div className={`bg-haven-rose/90 ${compact ? 'p-1' : 'p-1.5'} rounded-md text-white`} title="Ensurdecido">
               <VolumeX className={compact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
             </div>
-          ) : participant.isMuted ? (
-            <div className={`bg-haven-rose/90 ${compact ? 'p-1' : 'p-1.5'} rounded-md text-white`} title="Mutado">
+          )}
+          {participant.isMuted && (
+            <div className={`bg-haven-rose/90 ${compact ? 'p-1' : 'p-1.5'} rounded-md text-white`} title="Microfone desativado">
               <MicOff className={compact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

@@ -585,3 +585,27 @@ func (h *Hub) BroadcastPresence(userID, username, status string) {
 		Data:      outMsg,
 	}
 }
+
+// NotifyUserProfileUpdated broadcasts a profile change produced by the authenticated HTTP API.
+// This avoids relying on the uploading browser to announce the new avatar itself.
+func (h *Hub) NotifyUserProfileUpdated(userID, username, avatarURL string) {
+	if userID == "" || avatarURL == "" {
+		return
+	}
+
+	payload, _ := json.Marshal(UserProfilePayload{
+		UserID:    userID,
+		Username:  username,
+		AvatarURL: avatarURL,
+	})
+	message, _ := json.Marshal(WSMessage{
+		Type:    EventUserProfileUpdated,
+		Payload: payload,
+	})
+
+	select {
+	case h.broadcast <- &BroadcastMessage{ChannelID: "", Data: message}:
+	default:
+		log.Printf("[WS Profile Update] broadcast queue full for user=%s", userID)
+	}
+}

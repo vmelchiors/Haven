@@ -12,8 +12,14 @@ import (
 )
 
 type Handler struct {
-	service *Service
-	cfg     *config.Config
+	service               *Service
+	cfg                   *config.Config
+	profileUpdateNotifier ProfileUpdateNotifier
+}
+
+// ProfileUpdateNotifier publishes authoritative profile changes to connected clients.
+type ProfileUpdateNotifier interface {
+	NotifyUserProfileUpdated(userID, username, avatarURL string)
 }
 
 func NewHandler(service *Service, cfg *config.Config) *Handler {
@@ -21,6 +27,10 @@ func NewHandler(service *Service, cfg *config.Config) *Handler {
 		service: service,
 		cfg:     cfg,
 	}
+}
+
+func (h *Handler) SetProfileUpdateNotifier(notifier ProfileUpdateNotifier) {
+	h.profileUpdateNotifier = notifier
 }
 
 type RegisterRequest struct {
@@ -307,6 +317,14 @@ func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.UpdateAvatar(claims.UserID, avatarURL); err != nil {
 		httpError(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if h.profileUpdateNotifier != nil {
+		username := claims.Username
+		if user, getErr := h.service.GetUserByID(claims.UserID); getErr == nil {
+			username = user.Username
+		}
+		h.profileUpdateNotifier.NotifyUserProfileUpdated(claims.UserID, username, avatarURL)
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]string{

@@ -262,6 +262,7 @@ export const ChannelSidebar: React.FC = () => {
                               </span>
                             )}
                             {m.is_muted && <MicOff className="w-3 h-3 text-haven-rose" />}
+                            {m.is_deafened && <VolumeX className="w-3 h-3 text-haven-rose" />}
                           </div>
                         </div>
                       ))}
@@ -365,5 +366,4 @@ export const ChannelSidebar: React.FC = () => {
     </aside>
   );
 };
-
 

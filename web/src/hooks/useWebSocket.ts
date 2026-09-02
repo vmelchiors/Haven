@@ -210,16 +210,6 @@ export function useWebSocket() {
     }
   }, [isAuthenticated, tokens?.access_token]);
 
-  useEffect(() => {
-    const forwardProfileUpdate = (event: Event) => {
-      const profile = (event as CustomEvent).detail;
-      if (!profile?.avatar_url) return;
-      sendWebSocketMessage({ type: 'user_profile_updated', payload: profile });
-    };
-    window.addEventListener('haven:profile-updated', forwardProfileUpdate);
-    return () => window.removeEventListener('haven:profile-updated', forwardProfileUpdate);
-  }, []);
-
   const sendChatMessage = useCallback((channelId: string, content: string) => {
     sendWebSocketMessage({
       type: 'chat_message',

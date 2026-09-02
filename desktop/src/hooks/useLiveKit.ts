@@ -19,6 +19,12 @@ interface RemoteAudioOutput {
   trackSid?: string;
 }
 
+// A remote screen share must be announced as soon as LiveKit publishes it.
+// Its media track is intentionally absent until the viewer chooses to subscribe.
+export const isRemoteScreenSharePublished = (
+  publication?: Pick<RemoteTrackPublication, 'isMuted'>,
+) => Boolean(publication && !publication.isMuted);
+
 export function useLiveKit(_channelId?: string) {
   const roomRef = useRef<Room | null>(null);
   const remoteAudiosRef = useRef<Map<string, RemoteAudioOutput>>(new Map());
@@ -62,7 +68,7 @@ export function useLiveKit(_channelId?: string) {
       isScreenSharing,
       audioLevel: 0,
     });
-    members.forEach((member) => upsertParticipant({
+    members.filter((member) => member.user_id !== currentUser.id).forEach((member) => upsertParticipant({
       identity: member.user_id,
       name: member.username,
       isSpeaking: Boolean(member.is_speaking),
@@ -123,9 +129,9 @@ export function useLiveKit(_channelId?: string) {
     const screen = participant.getTrackPublication(Track.Source.ScreenShare);
     upsertParticipant({
       identity: participant.identity, name: participant.name || participant.identity,
-      isSpeaking: participant.isSpeaking, isMuted: !participant.isMicrophoneEnabled, isDeafened: false,
+      isSpeaking: participant.isSpeaking, isMuted: !participant.isMicrophoneEnabled,
       isCameraOn: Boolean(camera?.track && !camera.isMuted),
-      isScreenSharing: Boolean(screen?.track && !screen.isMuted),
+      isScreenSharing: isRemoteScreenSharePublished(screen),
       audioLevel: participant.audioLevel,
       cameraTrack: camera?.track?.mediaStreamTrack,
       screenTrack: screen?.track?.mediaStreamTrack,

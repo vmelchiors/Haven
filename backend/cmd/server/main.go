@@ -61,6 +61,7 @@ func main() {
 	feedbackHandler := feedback.NewHandler(feedbackService)
 
 	chatHub := chat.NewHub(msgRepo, chanRepo)
+	authHandler.SetProfileUpdateNotifier(chatHub)
 	go chatHub.Run()
 	chatHandler := chat.NewHandler(chatHub)
 
