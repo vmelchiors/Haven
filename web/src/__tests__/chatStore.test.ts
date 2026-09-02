@@ -51,6 +51,15 @@ describe('ChatStore', () => {
     expect(useChatStore.getState().presence['u1']).toBeUndefined();
   });
 
+  it('should clear stale presence before applying a reconnect snapshot', () => {
+    useChatStore.getState().setPresence('u1', 'online', 'Alice');
+    useChatStore.getState().setPresence('u2', 'idle', 'Bob');
+
+    useChatStore.getState().clearPresence();
+
+    expect(useChatStore.getState().presence).toEqual({});
+  });
+
   it('should track and clear unread counts appropriately', () => {
     useChatStore.setState({ unreadCounts: {} });
 

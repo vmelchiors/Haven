@@ -19,6 +19,14 @@ import (
 	"haven-backend/pkg/database"
 )
 
+type memberUpdateSpy struct {
+	communityIDs []string
+}
+
+func (s *memberUpdateSpy) NotifyCommunityMembersUpdated(communityID string) {
+	s.communityIDs = append(s.communityIDs, communityID)
+}
+
 func setupCommunityTest(t *testing.T) (*community.Service, *community.Handler, *database.DB, *config.Config, func()) {
 	tempDir, err := os.MkdirTemp("", "haven-comm-test-*")
 	if err != nil {
@@ -127,8 +135,8 @@ func TestCommunityService_FullLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMembers failed: %v", err)
 	}
-	if len(members) == 0 {
-		t.Errorf("expected members list to contain users, got 0")
+	if len(members) != 3 {
+		t.Errorf("expected public community to list all 3 users, got %d", len(members))
 	}
 
 	// 8. Update community as owner
@@ -165,6 +173,13 @@ func TestCommunityService_FullLifecycle(t *testing.T) {
 	if joinedComm.ID != privComm.ID {
 		t.Errorf("expected joined community ID %s, got %s", privComm.ID, joinedComm.ID)
 	}
+	privateMembers, err := svc.ListMembers(privComm.ID, "u_other", false)
+	if err != nil {
+		t.Fatalf("ListMembers failed for private community: %v", err)
+	}
+	if len(privateMembers) != 2 {
+		t.Errorf("expected private community to list only owner and joined member, got %d", len(privateMembers))
+	}
 
 	// After joining, u_other sees both communities in approved list
 	otherListAfter, _ := svc.ListApproved("u_other", false)
@@ -197,6 +212,8 @@ func TestCommunityService_FullLifecycle(t *testing.T) {
 func TestCommunityHandler_HTTP(t *testing.T) {
 	_, handler, _, _, cleanup := setupCommunityTest(t)
 	defer cleanup()
+	memberNotifier := &memberUpdateSpy{}
+	handler.SetMemberUpdateNotifier(memberNotifier)
 
 	ownerClaims := &auth.Claims{UserID: "u_owner", Username: "owner", IsAdmin: false}
 	adminClaims := &auth.Claims{UserID: "u_admin", Username: "admin", IsAdmin: true}
@@ -280,6 +297,9 @@ func TestCommunityHandler_HTTP(t *testing.T) {
 	r.ServeHTTP(jW, jReq)
 	if jW.Code != http.StatusOK {
 		t.Fatalf("expected 200 on Join by ID, got %d: %s", jW.Code, jW.Body.String())
+	}
+	if len(memberNotifier.communityIDs) != 1 || memberNotifier.communityIDs[0] != created.ID {
+		t.Fatalf("expected member update notification for %s, got %v", created.ID, memberNotifier.communityIDs)
 	}
 
 	// 5. Delete community HTTP

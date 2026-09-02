@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Hash, Volume2, Plus, Settings, Mic, MicOff, Headphones, VolumeX, Lock, Copy, Check, Sliders, MessageSquarePlus, Video, Monitor, PhoneOff } from 'lucide-react';
-import { Channel, ChannelType } from '../../types';
+import { Channel, ChannelType, User } from '../../types';
 import { useCommunityStore } from '../../stores/communityStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -8,10 +8,16 @@ import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { Avatar } from '../ui/Avatar';
 
+export function resolveVoiceMemberAvatar(userId: string, currentUser: User | null, members: User[]): string | undefined {
+  if (currentUser?.id === userId) return currentUser.avatar_url;
+  return members.find((member) => member.id === userId)?.avatar_url;
+}
+
 export const ChannelSidebar: React.FC = () => {
   const selectedCommunity = useCommunityStore((s) => s.selectedCommunity);
   const selectedChannel = useCommunityStore((s) => s.selectedChannel);
   const selectChannel = useCommunityStore((s) => s.selectChannel);
+  const members = useCommunityStore((s) => s.members);
   const unreadCounts = useChatStore((s) => s.unreadCounts);
 
   const activeVoiceChannel = useMediaStore((s) => s.activeVoiceChannel);
@@ -247,7 +253,12 @@ export const ChannelSidebar: React.FC = () => {
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <Avatar name={m.username} size="xs" isSpeaking={m.is_speaking} />
+                            <Avatar
+                              src={resolveVoiceMemberAvatar(m.user_id, user, members)}
+                              name={m.username}
+                              size="xs"
+                              isSpeaking={m.is_speaking}
+                            />
                             <span className="truncate text-[11px] text-zinc-300">{m.username}</span>
                           </div>
                           <div className="flex items-center gap-1">
@@ -366,4 +377,3 @@ export const ChannelSidebar: React.FC = () => {
     </aside>
   );
 };
-

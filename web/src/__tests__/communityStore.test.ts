@@ -9,6 +9,7 @@ describe('CommunityStore', () => {
       pendingCommunities: [],
       selectedCommunity: null,
       selectedChannel: null,
+      members: [],
       isLoading: false,
       error: null,
     });
@@ -101,5 +102,28 @@ describe('CommunityStore', () => {
 
     const success = await useCommunityStore.getState().rejectCommunity('c_new', 'Comprovante ilegivel');
     expect(success).toBe(true);
+  });
+
+  it('should refresh members only for the community still being viewed', async () => {
+    const viewedCommunity = {
+      id: 'c1',
+      name: 'Haven',
+      owner_id: 'u1',
+      status: 'APPROVED' as const,
+      donation_amount: 1500,
+      created_at: new Date().toISOString(),
+    };
+    useCommunityStore.setState({ selectedCommunity: viewedCommunity });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [{ id: 'u2', username: 'Bob', is_admin: false, created_at: new Date().toISOString() }],
+    } as Response);
+
+    await useCommunityStore.getState().fetchMembers('c1');
+    expect(useCommunityStore.getState().members.map((member) => member.id)).toEqual(['u2']);
+
+    useCommunityStore.setState({ selectedCommunity: { ...viewedCommunity, id: 'c2' } });
+    await useCommunityStore.getState().fetchMembers('c1');
+    expect(useCommunityStore.getState().members.map((member) => member.id)).toEqual(['u2']);
   });
 });

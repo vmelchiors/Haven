@@ -17,6 +17,7 @@ interface ChatState {
   markChannelAsRead: (channelId: string) => void;
   setTyping: (channelId: string, userId: string, username: string, isTyping: boolean) => void;
   setPresence: (userId: string, status: PresenceStatus, username?: string) => void;
+  clearPresence: () => void;
   updateUserProfile: (userId: string, username: string, avatarUrl: string) => void;
   clearChannelMessages: (channelId: string) => void;
 }
@@ -180,6 +181,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
   },
+
+  clearPresence: () => set({ presence: {} }),
 
   updateUserProfile: (userId, username, avatarUrl) => set((state) => {
     const presence = { ...state.presence };

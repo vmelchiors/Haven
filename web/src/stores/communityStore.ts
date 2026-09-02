@@ -103,7 +103,9 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
       });
       if (res.ok) {
         const membersList = await res.json();
-        set({ members: membersList || [] });
+        if (get().selectedCommunity?.id === communityId) {
+          set({ members: membersList || [] });
+        }
       }
     } catch (err) {
       // Ignored

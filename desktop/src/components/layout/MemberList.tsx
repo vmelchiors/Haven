@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useCommunityStore } from '../../stores/communityStore';
@@ -10,6 +10,30 @@ export const MemberList: React.FC = () => {
   const currentUser = useAuthStore((s) => s.user);
   const members = useCommunityStore((s) => s.members);
   const selectedCommunity = useCommunityStore((s) => s.selectedCommunity);
+  const fetchMembers = useCommunityStore((s) => s.fetchMembers);
+
+  useEffect(() => {
+    const communityId = selectedCommunity?.id;
+    if (!communityId) return;
+
+    const refreshMembers = () => {
+      void fetchMembers(communityId);
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshMembers();
+    };
+
+    refreshMembers();
+    window.addEventListener('focus', refreshMembers);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    const refreshInterval = window.setInterval(refreshMembers, 30_000);
+
+    return () => {
+      window.removeEventListener('focus', refreshMembers);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.clearInterval(refreshInterval);
+    };
+  }, [fetchMembers, selectedCommunity?.id]);
 
   const ownerId = selectedCommunity?.owner_id;
   const isPrivate = Boolean(selectedCommunity?.is_private);
@@ -125,8 +149,7 @@ export const MemberList: React.FC = () => {
       </div>
 
       {/* OFFLINE SECTION */}
-      {offlineMembers.length > 0 && (
-        <div>
+      <div>
           <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2 px-1">
             Offline — {offlineMembers.length}
           </div>
@@ -166,8 +189,7 @@ export const MemberList: React.FC = () => {
               );
             })}
           </div>
-        </div>
-      )}
+      </div>
     </aside>
   );
 };

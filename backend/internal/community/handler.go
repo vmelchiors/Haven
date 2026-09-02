@@ -18,8 +18,13 @@ import (
 )
 
 type Handler struct {
-	service *Service
-	cfg     *config.Config
+	service        *Service
+	cfg            *config.Config
+	memberNotifier MemberUpdateNotifier
+}
+
+type MemberUpdateNotifier interface {
+	NotifyCommunityMembersUpdated(communityID string)
 }
 
 func NewHandler(service *Service, cfg *config.Config) *Handler {
@@ -27,6 +32,10 @@ func NewHandler(service *Service, cfg *config.Config) *Handler {
 		service: service,
 		cfg:     cfg,
 	}
+}
+
+func (h *Handler) SetMemberUpdateNotifier(notifier MemberUpdateNotifier) {
+	h.memberNotifier = notifier
 }
 
 type RejectRequest struct {
@@ -276,6 +285,10 @@ func (h *Handler) Join(w http.ResponseWriter, r *http.Request) {
 		}
 		httpError(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if h.memberNotifier != nil {
+		h.memberNotifier.NotifyCommunityMembersUpdated(comm.ID)
 	}
 
 	jsonResponse(w, http.StatusOK, comm)

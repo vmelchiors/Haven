@@ -311,11 +311,16 @@ func (r *sqlCommunityRepository) IsMember(ctx context.Context, communityID, user
 
 func (r *sqlCommunityRepository) ListMembers(ctx context.Context, communityID string) ([]CommunityMember, error) {
 	query := `
-		SELECT u.id, u.username, COALESCE(u.avatar_url, ''), (c.owner_id = u.id) as is_owner, u.is_admin, cm.created_at
-		FROM community_members cm
-		JOIN users u ON u.id = cm.user_id
-		JOIN communities c ON c.id = cm.community_id
-		WHERE cm.community_id = ?
+		SELECT u.id, u.username, COALESCE(u.avatar_url, ''), (c.owner_id = u.id) as is_owner,
+		       u.is_admin, u.created_at
+		FROM communities c
+		JOIN users u ON c.is_private = 0 OR EXISTS (
+			SELECT 1
+			FROM community_members allowed
+			WHERE allowed.community_id = c.id AND allowed.user_id = u.id
+		)
+		LEFT JOIN community_members cm ON cm.community_id = c.id AND cm.user_id = u.id
+		WHERE c.id = ?
 		ORDER BY is_owner DESC, u.username ASC
 	`
 	rows, err := r.db.QueryContext(ctx, query, communityID)

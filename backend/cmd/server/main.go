@@ -62,6 +62,7 @@ func main() {
 
 	chatHub := chat.NewHub(msgRepo, chanRepo)
 	authHandler.SetProfileUpdateNotifier(chatHub)
+	commHandler.SetMemberUpdateNotifier(chatHub)
 	go chatHub.Run()
 	chatHandler := chat.NewHandler(chatHub)
 
