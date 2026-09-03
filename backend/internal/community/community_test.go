@@ -135,8 +135,23 @@ func TestCommunityService_FullLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMembers failed: %v", err)
 	}
-	if len(members) != 3 {
-		t.Errorf("expected public community to list all 3 users, got %d", len(members))
+	if len(members) != 1 || members[0].ID != "u_owner" {
+		t.Errorf("expected public community to list only its owner member, got %+v", members)
+	}
+
+	joinedPublic, err := svc.Join("u_other", comm.ID)
+	if err != nil {
+		t.Fatalf("failed to join public community: %v", err)
+	}
+	if joinedPublic.ID != comm.ID {
+		t.Errorf("expected joined public community ID %s, got %s", comm.ID, joinedPublic.ID)
+	}
+	members, err = svc.ListMembers(comm.ID, "u_other", false)
+	if err != nil {
+		t.Fatalf("ListMembers failed after joining public community: %v", err)
+	}
+	if len(members) != 2 || members[0].ID != "u_owner" || members[1].ID != "u_other" {
+		t.Errorf("expected only explicit public community members, got %+v", members)
 	}
 
 	// 8. Update community as owner
@@ -164,6 +179,10 @@ func TestCommunityService_FullLifecycle(t *testing.T) {
 	}
 
 	_, _ = svc.Approve(privComm.ID)
+	_, err = svc.ListMembers(privComm.ID, "u_other", false)
+	if err != community.ErrUnauthorized {
+		t.Errorf("expected private member list to reject non-member, got %v", err)
+	}
 
 	// User u_other joins private community using Community ID (UUID)
 	joinedComm, err := svc.Join("u_other", privComm.ID)

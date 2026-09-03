@@ -192,9 +192,18 @@ func TestCommunityAndChannelRepository(t *testing.T) {
 	if err := commRepo.AddMember(ctx, commID, memberID); err != nil {
 		t.Fatalf("failed to add member: %v", err)
 	}
+	nonMemberID := uuid.New().String()
+	if err := userRepo.Create(ctx, &database.User{ID: nonMemberID, Username: "outsider", PasswordHash: "p", CreatedAt: time.Now()}); err != nil {
+		t.Fatalf("failed to create non-member: %v", err)
+	}
 	members, err := commRepo.ListMembers(ctx, commID)
 	if err != nil || len(members) != 2 {
 		t.Fatalf("expected 2 members, got %d, err: %v", len(members), err)
+	}
+	for _, member := range members {
+		if member.UserID == nonMemberID {
+			t.Fatalf("public community exposed non-member %s", nonMemberID)
+		}
 	}
 
 	// 5. Channels

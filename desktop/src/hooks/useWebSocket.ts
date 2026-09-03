@@ -13,6 +13,16 @@ let messageQueue: WSMessage[] = [];
 
 const webrtcSignalListeners = new Set<(msg: WSMessage) => void>();
 
+export function refreshMembersForEvent(msg: WSMessage) {
+  if (msg.type !== 'community_members_updated' || !msg.payload) return;
+
+  const { community_id } = msg.payload;
+  const selectedCommunity = useCommunityStore.getState().selectedCommunity;
+  if (community_id && selectedCommunity?.id === community_id) {
+    void useCommunityStore.getState().fetchMembers(community_id);
+  }
+}
+
 export function subscribeToWebSocketEvents(listener: (msg: WSMessage) => void) {
   webrtcSignalListeners.add(listener);
   return () => {
@@ -47,10 +57,6 @@ function setupWebSocket(accessToken: string) {
       isConnecting = false;
 
       useChatStore.getState().clearPresence();
-      const selectedCommunityId = useCommunityStore.getState().selectedCommunity?.id;
-      if (selectedCommunityId) {
-        void useCommunityStore.getState().fetchMembers(selectedCommunityId);
-      }
       if (pingInterval) clearInterval(pingInterval);
       pingInterval = window.setInterval(() => {
         if (socket?.readyState === WebSocket.OPEN) {
@@ -112,26 +118,10 @@ function setupWebSocket(accessToken: string) {
               if (msg.payload) {
                 const { user_id, status, username } = msg.payload;
                 setPresence(user_id, status, username);
-
-                const communityState = useCommunityStore.getState();
-                const selectedCommunity = communityState.selectedCommunity;
-                const isUnknownPublicUser = status !== 'offline'
-                  && selectedCommunity
-                  && !selectedCommunity.is_private
-                  && !communityState.members.some((member) => member.id === user_id);
-                if (isUnknownPublicUser) {
-                  void communityState.fetchMembers(selectedCommunity.id);
-                }
               }
               break;
             case 'community_members_updated':
-              if (msg.payload) {
-                const { community_id } = msg.payload;
-                const selectedCommunity = useCommunityStore.getState().selectedCommunity;
-                if (community_id && selectedCommunity?.id === community_id) {
-                  void useCommunityStore.getState().fetchMembers(community_id);
-                }
-              }
+              refreshMembersForEvent(msg);
               break;
             case 'user_profile_updated':
               if (msg.payload) {

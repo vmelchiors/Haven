@@ -36,5 +36,6 @@ describe('MemberList', () => {
     expect(screen.getByText('Online — 1')).toBeInTheDocument();
     expect(screen.getByText('Offline — 1')).toBeInTheDocument();
     expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(useCommunityStore.getState().fetchMembers).not.toHaveBeenCalled();
   });
 });

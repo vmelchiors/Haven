@@ -300,9 +300,22 @@ func (s *Service) Delete(communityID, userID string, isAdmin bool) error {
 	return s.commRepo.Delete(ctx, communityID)
 }
 
-// ListMembers returns all users for a community
 func (s *Service) ListMembers(communityID, userID string, isAdmin bool) ([]database.User, error) {
 	ctx := context.Background()
+	comm, err := s.commRepo.GetByID(ctx, communityID)
+	if err != nil {
+		return nil, err
+	}
+	if comm.IsPrivate && comm.OwnerID != userID && !isAdmin {
+		isMember, membershipErr := s.commRepo.IsMember(ctx, communityID, userID)
+		if membershipErr != nil {
+			return nil, membershipErr
+		}
+		if !isMember {
+			return nil, ErrUnauthorized
+		}
+	}
+
 	members, err := s.commRepo.ListMembers(ctx, communityID)
 	if err != nil {
 		return nil, err
