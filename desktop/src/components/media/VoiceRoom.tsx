@@ -32,14 +32,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({ channel }) => {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-haven-darkest overflow-hidden relative">
-      <header className="h-14 px-4 border-b border-haven-border flex items-center justify-between flex-shrink-0 bg-haven-darker/92 backdrop-blur-xl z-20">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-emerald-950/70 border border-emerald-800/50 flex items-center justify-center flex-shrink-0">
+      <header className="h-12 px-3.5 border-b border-haven-border flex items-center justify-between flex-shrink-0 bg-haven-darker/92 backdrop-blur-xl z-20">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-emerald-950/70 border border-emerald-800/50 flex items-center justify-center flex-shrink-0">
             <AudioLines className="w-4 h-4 text-haven-emerald" />
           </div>
-          <div className="min-w-0">
-            <h2 className="font-semibold text-sm text-zinc-100 tracking-tight truncate">{channel.name}</h2>
-            <div className="flex items-center gap-2 mt-0.5">
+          <div className="min-w-0 leading-none">
+            <h2 className="font-semibold text-sm leading-4 text-zinc-100 tracking-tight truncate">{channel.name}</h2>
+            <div className="flex items-center gap-1.5 mt-px leading-3">
               <span className={`flex items-center gap-1 text-[10px] font-medium ${
                 connectionState === 'error'
                   ? 'text-haven-rose'

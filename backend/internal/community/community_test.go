@@ -19,6 +19,14 @@ import (
 	"haven-backend/pkg/database"
 )
 
+type memberUpdateSpy struct {
+	communityIDs []string
+}
+
+func (s *memberUpdateSpy) NotifyCommunityMembersUpdated(communityID string) {
+	s.communityIDs = append(s.communityIDs, communityID)
+}
+
 func setupCommunityTest(t *testing.T) (*community.Service, *community.Handler, *database.DB, *config.Config, func()) {
 	tempDir, err := os.MkdirTemp("", "haven-comm-test-*")
 	if err != nil {
@@ -127,8 +135,23 @@ func TestCommunityService_FullLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMembers failed: %v", err)
 	}
-	if len(members) == 0 {
-		t.Errorf("expected members list to contain users, got 0")
+	if len(members) != 1 || members[0].ID != "u_owner" {
+		t.Errorf("expected public community to list only its owner member, got %+v", members)
+	}
+
+	joinedPublic, err := svc.Join("u_other", comm.ID)
+	if err != nil {
+		t.Fatalf("failed to join public community: %v", err)
+	}
+	if joinedPublic.ID != comm.ID {
+		t.Errorf("expected joined public community ID %s, got %s", comm.ID, joinedPublic.ID)
+	}
+	members, err = svc.ListMembers(comm.ID, "u_other", false)
+	if err != nil {
+		t.Fatalf("ListMembers failed after joining public community: %v", err)
+	}
+	if len(members) != 2 || members[0].ID != "u_owner" || members[1].ID != "u_other" {
+		t.Errorf("expected only explicit public community members, got %+v", members)
 	}
 
 	// 8. Update community as owner
@@ -156,6 +179,10 @@ func TestCommunityService_FullLifecycle(t *testing.T) {
 	}
 
 	_, _ = svc.Approve(privComm.ID)
+	_, err = svc.ListMembers(privComm.ID, "u_other", false)
+	if err != community.ErrUnauthorized {
+		t.Errorf("expected private member list to reject non-member, got %v", err)
+	}
 
 	// User u_other joins private community using Community ID (UUID)
 	joinedComm, err := svc.Join("u_other", privComm.ID)
@@ -164,6 +191,13 @@ func TestCommunityService_FullLifecycle(t *testing.T) {
 	}
 	if joinedComm.ID != privComm.ID {
 		t.Errorf("expected joined community ID %s, got %s", privComm.ID, joinedComm.ID)
+	}
+	privateMembers, err := svc.ListMembers(privComm.ID, "u_other", false)
+	if err != nil {
+		t.Fatalf("ListMembers failed for private community: %v", err)
+	}
+	if len(privateMembers) != 2 {
+		t.Errorf("expected private community to list only owner and joined member, got %d", len(privateMembers))
 	}
 
 	// After joining, u_other sees both communities in approved list
@@ -197,6 +231,8 @@ func TestCommunityService_FullLifecycle(t *testing.T) {
 func TestCommunityHandler_HTTP(t *testing.T) {
 	_, handler, _, _, cleanup := setupCommunityTest(t)
 	defer cleanup()
+	memberNotifier := &memberUpdateSpy{}
+	handler.SetMemberUpdateNotifier(memberNotifier)
 
 	ownerClaims := &auth.Claims{UserID: "u_owner", Username: "owner", IsAdmin: false}
 	adminClaims := &auth.Claims{UserID: "u_admin", Username: "admin", IsAdmin: true}
@@ -280,6 +316,9 @@ func TestCommunityHandler_HTTP(t *testing.T) {
 	r.ServeHTTP(jW, jReq)
 	if jW.Code != http.StatusOK {
 		t.Fatalf("expected 200 on Join by ID, got %d: %s", jW.Code, jW.Body.String())
+	}
+	if len(memberNotifier.communityIDs) != 1 || memberNotifier.communityIDs[0] != created.ID {
+		t.Fatalf("expected member update notification for %s, got %v", created.ID, memberNotifier.communityIDs)
 	}
 
 	// 5. Delete community HTTP

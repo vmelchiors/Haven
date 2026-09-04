@@ -16,17 +16,18 @@ import (
 type WSEventType string
 
 const (
-	EventChatMessage        WSEventType = "chat_message"
-	EventUserTyping         WSEventType = "user_typing"
-	EventPresenceUpdate     WSEventType = "presence_update"
-	EventUserProfileUpdated WSEventType = "user_profile_updated"
-	EventUserJoinedVoice    WSEventType = "user_joined_voice"
-	EventUserLeftVoice      WSEventType = "user_left_voice"
-	EventVoiceStateUpdate   WSEventType = "voice_state_update"
-	EventVoiceSnapshot      WSEventType = "voice_snapshot"
-	EventWebRTCSignal       WSEventType = "webrtc_signal"
-	EventPing               WSEventType = "ping"
-	EventError              WSEventType = "error"
+	EventChatMessage             WSEventType = "chat_message"
+	EventUserTyping              WSEventType = "user_typing"
+	EventPresenceUpdate          WSEventType = "presence_update"
+	EventCommunityMembersUpdated WSEventType = "community_members_updated"
+	EventUserProfileUpdated      WSEventType = "user_profile_updated"
+	EventUserJoinedVoice         WSEventType = "user_joined_voice"
+	EventUserLeftVoice           WSEventType = "user_left_voice"
+	EventVoiceStateUpdate        WSEventType = "voice_state_update"
+	EventVoiceSnapshot           WSEventType = "voice_snapshot"
+	EventWebRTCSignal            WSEventType = "webrtc_signal"
+	EventPing                    WSEventType = "ping"
+	EventError                   WSEventType = "error"
 )
 
 // WSMessage is the envelope for WebSocket messages
@@ -62,6 +63,10 @@ type UserProfilePayload struct {
 	UserID    string `json:"user_id"`
 	Username  string `json:"username"`
 	AvatarURL string `json:"avatar_url"`
+}
+
+type CommunityMembersUpdatedPayload struct {
+	CommunityID string `json:"community_id"`
 }
 
 type VoiceStatePayload struct {
@@ -194,6 +199,7 @@ func (h *Hub) Run() {
 			h.BroadcastPresence(client.UserID, client.Username, "online")
 
 		case client := <-h.unregister:
+			shouldBroadcastOffline := false
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
@@ -243,11 +249,14 @@ func (h *Hub) Run() {
 				}
 				if !hasOtherConns {
 					h.presence[client.UserID] = "offline"
+					shouldBroadcastOffline = true
 				}
 			}
 			h.mu.Unlock()
 
-			h.BroadcastPresence(client.UserID, client.Username, "offline")
+			if shouldBroadcastOffline {
+				h.BroadcastPresence(client.UserID, client.Username, "offline")
+			}
 
 		case msg := <-h.broadcast:
 			h.mu.RLock()
@@ -583,5 +592,47 @@ func (h *Hub) BroadcastPresence(userID, username, status string) {
 	h.broadcast <- &BroadcastMessage{
 		ChannelID: "", // global broadcast
 		Data:      outMsg,
+	}
+}
+
+// NotifyUserProfileUpdated broadcasts a profile change produced by the authenticated HTTP API.
+// This avoids relying on the uploading browser to announce the new avatar itself.
+func (h *Hub) NotifyUserProfileUpdated(userID, username, avatarURL string) {
+	if userID == "" || avatarURL == "" {
+		return
+	}
+
+	payload, _ := json.Marshal(UserProfilePayload{
+		UserID:    userID,
+		Username:  username,
+		AvatarURL: avatarURL,
+	})
+	message, _ := json.Marshal(WSMessage{
+		Type:    EventUserProfileUpdated,
+		Payload: payload,
+	})
+
+	select {
+	case h.broadcast <- &BroadcastMessage{ChannelID: "", Data: message}:
+	default:
+		log.Printf("[WS Profile Update] broadcast queue full for user=%s", userID)
+	}
+}
+
+func (h *Hub) NotifyCommunityMembersUpdated(communityID string) {
+	if communityID == "" {
+		return
+	}
+
+	payload, _ := json.Marshal(CommunityMembersUpdatedPayload{CommunityID: communityID})
+	message, _ := json.Marshal(WSMessage{
+		Type:    EventCommunityMembersUpdated,
+		Payload: payload,
+	})
+
+	select {
+	case h.broadcast <- &BroadcastMessage{ChannelID: "", Data: message}:
+	default:
+		log.Printf("[WS Community Members] broadcast queue full for community=%s", communityID)
 	}
 }

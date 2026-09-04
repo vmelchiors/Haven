@@ -13,6 +13,16 @@ let messageQueue: WSMessage[] = [];
 
 const webrtcSignalListeners = new Set<(msg: WSMessage) => void>();
 
+export function refreshMembersForEvent(msg: WSMessage) {
+  if (msg.type !== 'community_members_updated' || !msg.payload) return;
+
+  const { community_id } = msg.payload;
+  const selectedCommunity = useCommunityStore.getState().selectedCommunity;
+  if (community_id && selectedCommunity?.id === community_id) {
+    void useCommunityStore.getState().fetchMembers(community_id);
+  }
+}
+
 export function subscribeToWebSocketEvents(listener: (msg: WSMessage) => void) {
   webrtcSignalListeners.add(listener);
   return () => {
@@ -45,6 +55,8 @@ function setupWebSocket(accessToken: string) {
 
     socket.onopen = () => {
       isConnecting = false;
+
+      useChatStore.getState().clearPresence();
       if (pingInterval) clearInterval(pingInterval);
       pingInterval = window.setInterval(() => {
         if (socket?.readyState === WebSocket.OPEN) {
@@ -107,6 +119,9 @@ function setupWebSocket(accessToken: string) {
                 const { user_id, status, username } = msg.payload;
                 setPresence(user_id, status, username);
               }
+              break;
+            case 'community_members_updated':
+              refreshMembersForEvent(msg);
               break;
             case 'user_profile_updated':
               if (msg.payload) {
@@ -209,16 +224,6 @@ export function useWebSocket() {
       isConnecting = false;
     }
   }, [isAuthenticated, tokens?.access_token]);
-
-  useEffect(() => {
-    const forwardProfileUpdate = (event: Event) => {
-      const profile = (event as CustomEvent).detail;
-      if (!profile?.avatar_url) return;
-      sendWebSocketMessage({ type: 'user_profile_updated', payload: profile });
-    };
-    window.addEventListener('haven:profile-updated', forwardProfileUpdate);
-    return () => window.removeEventListener('haven:profile-updated', forwardProfileUpdate);
-  }, []);
 
   const sendChatMessage = useCallback((channelId: string, content: string) => {
     sendWebSocketMessage({

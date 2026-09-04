@@ -125,8 +125,7 @@ export const MemberList: React.FC = () => {
       </div>
 
       {/* OFFLINE SECTION */}
-      {offlineMembers.length > 0 && (
-        <div>
+      <div>
           <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2 px-1">
             Offline — {offlineMembers.length}
           </div>
@@ -166,8 +165,7 @@ export const MemberList: React.FC = () => {
               );
             })}
           </div>
-        </div>
-      )}
+      </div>
     </aside>
   );
 };
