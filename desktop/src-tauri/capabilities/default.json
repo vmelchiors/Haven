@@ -6,6 +6,21 @@
   "permissions": [
     "core:default",
     "shell:default",
-    "global-shortcut:default"
+    "global-shortcut:allow-is-registered",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "updater:default",
+    "process:default",
+    "core:window:allow-unminimize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-maximize",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-decorations",
+    "core:window:allow-set-min-size",
+    "core:window:allow-set-position",
+    "core:window:allow-set-resizable",
+    "core:window:allow-set-size",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging"
   ]
 }

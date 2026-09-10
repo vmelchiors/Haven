@@ -7,10 +7,19 @@ import {
   startNoiseSuppressionTransition,
   type AINoiseSuppressionPipeline,
 } from '../lib/aiNoiseSuppression';
+import { mediaServerUrl } from '../lib/runtimeConfig';
 
 const clampVolume = (volume: number) => Math.min(Math.max(volume / 100, 0), 1);
 const isScreenShareSource = (source?: Track.Source) =>
   source === Track.Source.ScreenShare || source === Track.Source.ScreenShareAudio;
+const SCREEN_SHARE_REQUEST_EVENT = 'haven:screen-share-request';
+
+// dispatchEvent invokes listeners synchronously, so getDisplayMedia starts in
+// the original button gesture. Calling it later from a React effect is rejected
+// by Chromium/WebView2 because the transient user activation has already ended.
+export const requestScreenShare = (enabled: boolean) => {
+  window.dispatchEvent(new CustomEvent<boolean>(SCREEN_SHARE_REQUEST_EVENT, { detail: enabled }));
+};
 
 interface RemoteAudioOutput {
   element: HTMLAudioElement;
@@ -247,11 +256,32 @@ export function useLiveKit(_channelId?: string) {
     room.on(RoomEvent.TrackUnmuted, trackChanged);
     room.on(RoomEvent.ActiveSpeakersChanged, speakersChanged);
 
-    let connectUrl = rtcUrl;
-    if (connectUrl.startsWith('/')) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      connectUrl = `${protocol}//${window.location.host}${connectUrl}`;
-    }
+    const screenShareRequested = (event: Event) => {
+      if (room.state !== ConnectionState.Connected) return;
+      const enabled = (event as CustomEvent<boolean>).detail;
+      void room.localParticipant.setScreenShareEnabled(enabled, {
+        audio: true,
+        resolution: VideoPresets.h1080.resolution,
+      }).then(() => {
+        const state = useMediaStore.getState();
+        if (state.isScreenSharing !== enabled) state.toggleScreenShare();
+        const mediaTrack = room.localParticipant
+          .getTrackPublication(Track.Source.ScreenShare)?.track?.mediaStreamTrack;
+        if (mediaTrack) mediaTrack.onended = () => {
+          const latestState = useMediaStore.getState();
+          if (latestState.isScreenSharing) latestState.toggleScreenShare();
+          syncLocalParticipant(room.localParticipant);
+        };
+        syncLocalParticipant(room.localParticipant);
+      }).catch((error) => {
+        console.error('[Transmissão] Não foi possível compartilhar a tela:', error);
+        const state = useMediaStore.getState();
+        if (state.isScreenSharing) state.toggleScreenShare();
+      });
+    };
+    window.addEventListener(SCREEN_SHARE_REQUEST_EVENT, screenShareRequested);
+
+    const connectUrl = mediaServerUrl(rtcUrl);
     room.connect(connectUrl, rtcToken, { autoSubscribe: false }).then(async () => {
       if (disposed) return;
       room.remoteParticipants.forEach((participant) => {
@@ -266,11 +296,6 @@ export function useLiveKit(_channelId?: string) {
       if (state.isCameraOn) {
         await room.localParticipant.setCameraEnabled(true, { resolution: VideoPresets.h720.resolution, frameRate: 30 });
       }
-      if (state.isScreenSharing) {
-        await room.localParticipant.setScreenShareEnabled(true, {
-          audio: true, selfBrowserSurface: 'include', resolution: VideoPresets.h1080.resolution,
-        });
-      }
       syncLocalParticipant(room.localParticipant);
     }).catch((error) => {
       console.error('[LiveKit] Não foi possível conectar à sala:', error); markDisconnected();
@@ -279,6 +304,7 @@ export function useLiveKit(_channelId?: string) {
 
     return () => {
       disposed = true;
+      window.removeEventListener(SCREEN_SHARE_REQUEST_EVENT, screenShareRequested);
       room.removeAllListeners(); room.disconnect();
       remoteAudiosRef.current.forEach((_, key) => removeRemoteAudio(key.split(':')[0]));
       if (roomRef.current === room) roomRef.current = null;
@@ -336,16 +362,30 @@ export function useLiveKit(_channelId?: string) {
       syncLocalParticipant(room.localParticipant);
     };
 
-    navigator.mediaDevices.getUserMedia({
+    const captureMicrophone = (deviceId?: string) => navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: !isNoiseSuppressionEnabled,
         autoGainControl: true,
         channelCount: 1,
-        deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined,
+        deviceId: deviceId ? { exact: deviceId } : undefined,
       },
       video: false,
-    }).then(async (stream) => {
+    });
+    const acquireMicrophone = async () => {
+      try {
+        return await captureMicrophone(selectedInputDeviceId !== 'default' ? selectedInputDeviceId : undefined);
+      } catch (error) {
+        const missingSavedDevice = selectedInputDeviceId !== 'default'
+          && error instanceof DOMException
+          && (error.name === 'NotFoundError' || error.name === 'OverconstrainedError');
+        if (!missingSavedDevice) throw error;
+        useSettingsStore.getState().setInputDevice('default');
+        return captureMicrophone();
+      }
+    };
+
+    acquireMicrophone().then(async (stream) => {
       if (controller.signal.aborted) {
         stream.getTracks().forEach((track) => track.stop());
         return;
@@ -398,21 +438,6 @@ export function useLiveKit(_channelId?: string) {
       useMediaStore.setState({ isCameraOn: false });
     });
   }, [isCameraOn, syncLocalParticipant]);
-
-  useEffect(() => {
-    const room = roomRef.current;
-    if (!room || room.state !== ConnectionState.Connected) return;
-    room.localParticipant.setScreenShareEnabled(isScreenSharing, {
-      audio: true, selfBrowserSurface: 'include', resolution: VideoPresets.h1080.resolution,
-    }).then(() => {
-      const mediaTrack = room.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.track?.mediaStreamTrack;
-      if (mediaTrack) mediaTrack.onended = () => useMediaStore.setState({ isScreenSharing: false });
-      syncLocalParticipant(room.localParticipant);
-    }).catch((error) => {
-      console.error('[Transmissão] Não foi possível compartilhar a tela:', error);
-      useMediaStore.setState({ isScreenSharing: false });
-    });
-  }, [isScreenSharing, syncLocalParticipant]);
 
   useEffect(() => {
     const room = roomRef.current;

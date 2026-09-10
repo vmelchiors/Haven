@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSettingsStore } from '../stores/settingsStore';
 
 describe('SettingsStore', () => {
@@ -33,5 +33,30 @@ describe('SettingsStore', () => {
 
     useSettingsStore.getState().setPttKey('KeyV');
     expect(useSettingsStore.getState().pttKey).toBe('KeyV');
+  });
+
+  it('requests microphone permission before listing real peripheral names', async () => {
+    const stop = vi.fn();
+    const enumerateDevices = vi.mocked(navigator.mediaDevices.enumerateDevices);
+    const getUserMedia = vi.mocked(navigator.mediaDevices.getUserMedia);
+    enumerateDevices
+      .mockResolvedValueOnce([
+        { deviceId: 'mic-real', kind: 'audioinput', label: '' } as MediaDeviceInfo,
+        { deviceId: 'speaker-real', kind: 'audiooutput', label: '' } as MediaDeviceInfo,
+      ])
+      .mockResolvedValueOnce([
+        { deviceId: 'mic-real', kind: 'audioinput', label: 'Microfone USB' } as MediaDeviceInfo,
+        { deviceId: 'speaker-real', kind: 'audiooutput', label: 'Headset USB' } as MediaDeviceInfo,
+      ]);
+    getUserMedia.mockResolvedValueOnce({ getTracks: () => [{ stop }] } as unknown as MediaStream);
+
+    await useSettingsStore.getState().loadAudioDevices();
+
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: true, video: false });
+    expect(stop).toHaveBeenCalledOnce();
+    expect(useSettingsStore.getState().inputDevices.map((device) => device.label))
+      .toContain('Microfone USB');
+    expect(useSettingsStore.getState().outputDevices.map((device) => device.label))
+      .toContain('Headset USB');
   });
 });

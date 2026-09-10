@@ -15,6 +15,7 @@ import {
   Download,
   BellRing,
   Laptop2,
+  RefreshCw,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -39,6 +40,8 @@ export const SettingsModal: React.FC = () => {
   const pttKey = useSettingsStore((s) => s.pttKey);
   const vadThreshold = useSettingsStore((s) => s.vadThreshold);
   const callSoundsEnabled = useSettingsStore((s) => s.callSoundsEnabled);
+  const audioDeviceStatus = useSettingsStore((s) => s.audioDeviceStatus);
+  const audioDeviceError = useSettingsStore((s) => s.audioDeviceError);
 
   const setInputDevice = useSettingsStore((s) => s.setInputDevice);
   const setOutputDevice = useSettingsStore((s) => s.setOutputDevice);
@@ -372,6 +375,7 @@ export const SettingsModal: React.FC = () => {
                 <select
                   value={selectedInputDeviceId}
                   onChange={(e) => setInputDevice(e.target.value)}
+                  disabled={audioDeviceStatus === 'loading'}
                   className="w-full bg-haven-darker border border-haven-border rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-haven-accent"
                 >
                   {inputDevices.map((dev) => (
@@ -390,6 +394,7 @@ export const SettingsModal: React.FC = () => {
                 <select
                   value={selectedOutputDeviceId}
                   onChange={(e) => setOutputDevice(e.target.value)}
+                  disabled={audioDeviceStatus === 'loading'}
                   className="w-full bg-haven-darker border border-haven-border rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-haven-accent"
                 >
                   {outputDevices.map((dev) => (
@@ -399,6 +404,27 @@ export const SettingsModal: React.FC = () => {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px] ${
+              audioDeviceError
+                ? 'border-amber-700/40 bg-amber-950/25 text-amber-200'
+                : 'border-haven-border bg-haven-darker text-zinc-400'
+            }`}>
+              <span>
+                {audioDeviceStatus === 'loading'
+                  ? 'Consultando os periféricos do Windows…'
+                  : audioDeviceError || 'Os periféricos são atualizados automaticamente quando conectados ou removidos.'}
+              </span>
+              <button
+                type="button"
+                onClick={() => void loadAudioDevices()}
+                disabled={audioDeviceStatus === 'loading'}
+                className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border border-haven-border bg-haven-card px-2 py-1 text-zinc-200 transition hover:border-haven-accent disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3 w-3 ${audioDeviceStatus === 'loading' ? 'animate-spin' : ''}`} />
+                Atualizar
+              </button>
             </div>
 
             {/* Input Mode: VAD vs PTT */}
