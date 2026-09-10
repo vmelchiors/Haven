@@ -1,0 +1,4 @@
+-keep class io.livekit.** { *; }
+-keep class org.webrtc.** { *; }
+-keep class livekit.** { *; }
+-keepattributes *Annotation*, Signature
