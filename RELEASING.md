@@ -43,6 +43,8 @@ o cliente consulta a release mais recente e oferece instalar a atualização.
 ## Android
 
 O projeto em `android/` é verificado pelo workflow `Android CI`. Consulte
-`android/README.md` para executar no emulador ou gerar um APK. Distribuição pela
-Play Store exigirá uma keystore própria, conta de desenvolvedor e um workflow de
-release separado; nenhum segredo de assinatura Android fica no repositório.
+`android/README.md` para executar no emulador ou gerar um APK. O workflow anexa
+um APK debug instalável e seu SHA-256 a cada execução, com retenção de 14 dias.
+Distribuição pela Play Store exigirá uma keystore própria, conta de desenvolvedor
+e um workflow de release separado; nenhum segredo de assinatura Android fica no
+repositório.

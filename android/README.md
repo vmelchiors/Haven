@@ -30,6 +30,14 @@ variável de ambiente ou propriedade Gradle:
 ./gradlew :app:assembleRelease -PHAVEN_API_URL=https://haven.vmelchior.tech
 ```
 
-Esta primeira versão é deliberadamente enxuta: voz é funcional; chat em tempo
-real, vídeo, tela compartilhada, cadastro/recuperação e publicação na Play Store
-ficam para as próximas iterações.
+## APK gerado pelo GitHub Actions
+
+Cada atualização de um PR direcionado à `main`, cada push na `main` e cada
+execução manual do workflow **Android CI** publica o artifact
+`Haven-Android-debug-<execução>`. Ele contém um APK instalável de teste e seu
+arquivo SHA-256, fica disponível na página da execução por 14 dias e não deve
+ser tratado como uma versão assinada para a Play Store.
+
+Esta primeira versão é deliberadamente enxuta, mas já oferece voz, presença,
+transmissão de tela, visualização em tela cheia e PiP. Chat em tempo real,
+cadastro/recuperação e publicação na Play Store ficam para as próximas iterações.
