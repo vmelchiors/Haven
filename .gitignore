@@ -26,8 +26,15 @@ yarn-debug.log
 .pnpm-debug.log
 web/dist/
 web/build/
+desktop/dist/
 desktop/node_modules/
 desktop/src-tauri/target/
+desktop/src-tauri/gen/
+android/.gradle/
+android/**/build/
+android/local.properties
+android/*.jks
+android/*.keystore
 
 # Tauri
 src-tauri/target/

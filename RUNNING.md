@@ -80,4 +80,25 @@ npm run tauri dev
 npm run tauri build
 ```
 
+O instalador Windows usa `https://haven.vmelchior.tech` por padrão para alcançar
+o backend fora do ambiente de desenvolvimento. `VITE_API_URL` pode substituir
+essa origem. Releases oficiais, assinatura e atualização automática estão
+documentadas em [RELEASING.md](RELEASING.md).
+
+---
+
+## 4. Executando o App Android (Kotlin + Compose)
+
+O MVP Android fica em `android/` e compartilha o backend e as salas LiveKit do
+Haven. Ele inclui os dois modelos DTLN quantizados no APK e processa o microfone
+localmente.
+
+```bash
+cd android
+./gradlew testDebugUnitTest assembleDebug
+```
+
+O backend público padrão é `https://haven.vmelchior.tech`. Para usar um backend
+local, configure `HAVEN_API_URL` conforme `android/README.md`.
+
 ---

@@ -62,7 +62,9 @@ services:
       - "7881:7881"
       - "50000-50050:50000-50050/udp"
     volumes:
-      - ./livekit.local.yaml:/etc/livekit.yaml
+      # The public deployment must advertise its external IP to desktop/mobile
+      # clients. Use livekit.local.yaml only in an explicit local override.
+      - ./livekit.yaml:/etc/livekit.yaml
 
 volumes:
   caddy_data:
