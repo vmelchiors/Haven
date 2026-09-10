@@ -1,25 +1,34 @@
-name: Release Desktop Windows
+name: Desktop Windows
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-release.yml'
   push:
     branches: [main]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-release.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: desktop-release
-  cancel-in-progress: false
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  release-windows:
-    name: Build, sign and publish Windows
+  build-windows:
+    name: Test and build Windows installer
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Read and validate version
         id: version
@@ -34,19 +43,24 @@ jobs:
             throw "As versões de package.json, tauri.conf.json e Cargo.toml precisam ser iguais."
           }
 
-          $tag = "v$packageVersion"
-          gh release view $tag *> $null
-          $releaseExists = $LASTEXITCODE -eq 0
+          $shouldPublish = $env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF -eq 'refs/heads/main'
+          $releaseExists = $false
+          if ($shouldPublish) {
+            gh release view "v$packageVersion" *> $null
+            $releaseExists = $LASTEXITCODE -eq 0
+          }
+
           "version=$packageVersion" >> $env:GITHUB_OUTPUT
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "release_exists=$($releaseExists.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "should_publish=$($shouldPublish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "should_build=$(((-not $releaseExists)).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 
       - name: Explain skipped existing release
-        if: steps.version.outputs.release_exists == 'true'
-        run: Write-Host "${{ steps.version.outputs.tag }} já foi publicada. Incremente a versão para gerar um novo instalador."
+        if: steps.version.outputs.should_build != 'true'
+        shell: pwsh
+        run: Write-Host "v${{ steps.version.outputs.version }} já foi publicada. Incremente a versão para gerar um novo instalador."
 
-      - name: Validate release configuration
-        if: steps.version.outputs.release_exists != 'true'
+      - name: Validate updater signing configuration
+        if: steps.version.outputs.should_build == 'true' && steps.version.outputs.should_publish == 'true'
         shell: pwsh
         env:
           SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -56,22 +70,22 @@ jobs:
           }
 
       - name: Setup Node.js
-        if: steps.version.outputs.release_exists != 'true'
-        uses: actions/setup-node@v4
+        if: steps.version.outputs.should_build == 'true'
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
       - name: Setup Rust
-        if: steps.version.outputs.release_exists != 'true'
+        if: steps.version.outputs.should_build == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
       - name: Cache Rust build artifacts
-        if: steps.version.outputs.release_exists != 'true'
-        uses: actions/cache@v4
+        if: steps.version.outputs.should_build == 'true'
+        uses: actions/cache@v5
         with:
           path: |
             C:\Users\runneradmin\.cargo\registry
@@ -82,17 +96,27 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install dependencies
-        if: steps.version.outputs.release_exists != 'true'
+        if: steps.version.outputs.should_build == 'true'
         working-directory: desktop
         run: npm ci
 
       - name: Test desktop client
-        if: steps.version.outputs.release_exists != 'true'
+        if: steps.version.outputs.should_build == 'true'
         working-directory: desktop
         run: npm test
 
+      - name: Build preview installer
+        if: steps.version.outputs.should_build == 'true' && steps.version.outputs.should_publish != 'true'
+        uses: tauri-apps/tauri-action@v1
+        env:
+          VITE_API_URL: ${{ vars.HAVEN_API_URL || 'https://haven.vmelchior.tech' }}
+        with:
+          projectPath: desktop
+          uploadUpdaterJson: false
+          args: --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.preview.conf.json
+
       - name: Build, sign and publish installer
-        if: steps.version.outputs.release_exists != 'true'
+        if: steps.version.outputs.should_build == 'true' && steps.version.outputs.should_publish == 'true'
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -115,3 +139,59 @@ jobs:
           updaterJsonPreferNsis: true
           releaseAssetNamePattern: 'Haven_Windows_x64[setup].[ext]'
           args: --target x86_64-pc-windows-msvc --bundles nsis
+
+      - name: Validate graphical executables and prepare artifact
+        if: steps.version.outputs.should_build == 'true'
+        id: installer
+        shell: pwsh
+        run: |
+          function Get-PeSubsystem([string] $Path) {
+            $bytes = [IO.File]::ReadAllBytes($Path)
+            if ($bytes.Length -lt 256 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) {
+              throw "$Path não é um executável PE válido."
+            }
+
+            $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+            $magic = [BitConverter]::ToUInt16($bytes, $peOffset + 24)
+            if ($magic -ne 0x10b -and $magic -ne 0x20b) {
+              throw "$Path possui um cabeçalho PE desconhecido."
+            }
+            $subsystemOffset = $peOffset + 24 + 68
+            return [BitConverter]::ToUInt16($bytes, $subsystemOffset)
+          }
+
+          $releaseDirectory = 'desktop/src-tauri/target/x86_64-pc-windows-msvc/release'
+          $installers = @(Get-ChildItem "$releaseDirectory/bundle/nsis" -File -Filter '*-setup.exe')
+          $applications = @(Get-Item "$releaseDirectory/haven-desktop.exe")
+          if ($installers.Count -ne 1) {
+            throw "Era esperado exatamente um instalador NSIS; encontrados: $($installers.Count)."
+          }
+          if ($applications.Count -ne 1) {
+            throw "Era esperado exatamente um executável principal; encontrados: $($applications.Count)."
+          }
+          if ((Get-PeSubsystem $installers[0].FullName) -ne 2) {
+            throw "O instalador foi compilado como aplicativo de terminal."
+          }
+          if ((Get-PeSubsystem $applications[0].FullName) -ne 2) {
+            throw "O Haven foi compilado como aplicativo de terminal."
+          }
+
+          $artifactDirectory = 'desktop/release-artifacts'
+          New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
+          $artifactPath = Join-Path $artifactDirectory 'Haven_Windows_x64-setup.exe'
+          Copy-Item -LiteralPath $installers[0].FullName -Destination $artifactPath
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifactPath).Hash.ToLowerInvariant()
+          "$hash  Haven_Windows_x64-setup.exe" | Set-Content -Encoding ascii "$artifactPath.sha256"
+          "size=$((Get-Item -LiteralPath $artifactPath).Length)" >> $env:GITHUB_OUTPUT
+
+      - name: Publish verified Windows installer artifact
+        if: steps.version.outputs.should_build == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Haven-Windows-x64-${{ steps.version.outputs.version }}-${{ github.run_number }}
+          path: |
+            desktop/release-artifacts/Haven_Windows_x64-setup.exe
+            desktop/release-artifacts/Haven_Windows_x64-setup.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

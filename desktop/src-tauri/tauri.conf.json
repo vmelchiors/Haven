@@ -34,6 +34,10 @@
     "targets": ["nsis"],
     "createUpdaterArtifacts": true,
     "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
       "nsis": {
         "installMode": "currentUser"
       }

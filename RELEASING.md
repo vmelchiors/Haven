@@ -6,6 +6,13 @@ O workflow `.github/workflows/desktop-release.yml` cria um instalador NSIS x64,
 assina o pacote de atualização, publica uma GitHub Release e gera `latest.json`
 para o atualizador embutido no aplicativo.
 
+Nos pull requests e nas execuções manuais, o mesmo workflow gera um instalador
+de prévia sem publicar uma release. O arquivo fica disponível nos artefatos da
+execução por 14 dias, junto do SHA-256. O CI também rejeita o pacote caso o
+instalador ou o executável principal tenham sido compilados como aplicação de
+terminal. O bootstrapper do WebView2 é incluído no instalador para evitar uma
+etapa de download separada durante a instalação.
+
 Configure no repositório GitHub:
 
 - secret `TAURI_SIGNING_PRIVATE_KEY`: conteúdo da chave privada do updater;
