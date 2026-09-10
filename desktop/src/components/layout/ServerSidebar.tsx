@@ -5,6 +5,7 @@ import { useFeedbackStore } from '../../stores/feedbackStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
+import { assetUrl } from '../../lib/runtimeConfig';
 
 export const ServerSidebar: React.FC = () => {
   const communities = useCommunityStore((s) => s.communities);
@@ -76,7 +77,7 @@ export const ServerSidebar: React.FC = () => {
               >
                 {comm.icon_url ? (
                   <img
-                    src={comm.icon_url}
+                    src={assetUrl(comm.icon_url)}
                     alt={comm.name}
                     className="w-full h-full object-cover"
                   />

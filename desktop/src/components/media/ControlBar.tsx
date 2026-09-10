@@ -16,6 +16,7 @@ import {
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { AudioMeter } from '../ui/AudioMeter';
+import { requestScreenShare } from '../../hooks/useLiveKit';
 
 export const ControlBar: React.FC = () => {
   const isMuted = useMediaStore((s) => s.isMuted);
@@ -32,7 +33,6 @@ export const ControlBar: React.FC = () => {
   const toggleMute = useMediaStore((s) => s.toggleMute);
   const toggleDeafen = useMediaStore((s) => s.toggleDeafen);
   const toggleCamera = useMediaStore((s) => s.toggleCamera);
-  const toggleScreenShare = useMediaStore((s) => s.toggleScreenShare);
   const toggleNoiseSuppression = useMediaStore((s) => s.toggleNoiseSuppression);
   const toggleCompanionMode = useMediaStore((s) => s.toggleCompanionMode);
   const disconnectVoice = useMediaStore((s) => s.disconnectVoice);
@@ -126,7 +126,10 @@ export const ControlBar: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => runAction(isScreenSharing ? 'Transmissão encerrada' : 'Transmissão iniciada', toggleScreenShare)}
+            onClick={() => runAction(
+              isScreenSharing ? 'Encerrando transmissão' : 'Selecione o que deseja transmitir',
+              () => requestScreenShare(!isScreenSharing),
+            )}
             disabled={!isVoiceConnected}
             aria-label={isScreenSharing ? 'Encerrar transmissão' : 'Iniciar transmissão'}
             aria-pressed={isScreenSharing}

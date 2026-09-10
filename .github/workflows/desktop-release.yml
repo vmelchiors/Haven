@@ -2,39 +2,75 @@ name: Release Desktop Windows
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Versão da Release (ex: v1.0.0)'
-        required: true
-        default: 'v1.0.0'
 
 permissions:
   contents: write
 
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
 jobs:
-  build-windows:
-    name: Build Desktop Windows (x64)
+  release-windows:
+    name: Build, sign and publish Windows
     runs-on: windows-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Read and validate version
+        id: version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $packageVersion = (Get-Content desktop/package.json | ConvertFrom-Json).version
+          $tauriVersion = (Get-Content desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $cargoVersion = (Select-String -Path desktop/src-tauri/Cargo.toml -Pattern '^version = "(.+)"$').Matches[0].Groups[1].Value
+          if ($packageVersion -ne $tauriVersion -or $packageVersion -ne $cargoVersion) {
+            throw "As versões de package.json, tauri.conf.json e Cargo.toml precisam ser iguais."
+          }
+
+          $tag = "v$packageVersion"
+          gh release view $tag *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+          "version=$packageVersion" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "release_exists=$($releaseExists.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      - name: Explain skipped existing release
+        if: steps.version.outputs.release_exists == 'true'
+        run: Write-Host "${{ steps.version.outputs.tag }} já foi publicada. Incremente a versão para gerar um novo instalador."
+
+      - name: Validate release configuration
+        if: steps.version.outputs.release_exists != 'true'
+        shell: pwsh
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if (-not $env:SIGNING_KEY) {
+            throw "Configure o secret TAURI_SIGNING_PRIVATE_KEY para assinar as atualizações."
+          }
+
       - name: Setup Node.js
+        if: steps.version.outputs.release_exists != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Setup Rust (stable)
+      - name: Setup Rust
+        if: steps.version.outputs.release_exists != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
       - name: Cache Rust build artifacts
+        if: steps.version.outputs.release_exists != 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -45,49 +81,37 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Set Release Tag
-        id: vars
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Install Node dependencies
+      - name: Install dependencies
+        if: steps.version.outputs.release_exists != 'true'
         working-directory: desktop
         run: npm ci
 
-      - name: Build Tauri Windows App
+      - name: Test desktop client
+        if: steps.version.outputs.release_exists != 'true'
         working-directory: desktop
-        run: npx tauri build
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: npm test
 
-      - name: Upload Windows Installer to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: Haven ${{ steps.vars.outputs.tag }} — Windows
-          body: |
-            ## 🛡️ Haven ${{ steps.vars.outputs.tag }} — Windows Release
-
-            ### 📦 Download:
-            - **Windows**: `Haven_${{ steps.vars.outputs.tag }}_x64-setup.exe` (Instalador NSIS)
-
-            ---
-            ### ✨ Recursos:
-            - 🎙️ Motor de voz WebRTC bidirecional de ultra-baixa latência.
-            - 🖥️ Compartilhamento de tela e câmera em alta definição.
-            - 💬 Chat contínuo com virtualização de mensagens.
-            - 🔒 Arquitetura Zero-PII com segurança criptográfica.
-            - 💳 Pagamento PIX direto sem intermediários.
-          files: |
-            desktop/src-tauri/target/release/bundle/nsis/*.exe
-          draft: false
-          prerelease: false
-          fail_on_unmatched_files: false
+      - name: Build, sign and publish installer
+        if: steps.version.outputs.release_exists != 'true'
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_API_URL: ${{ vars.HAVEN_API_URL || 'https://haven.vmelchior.tech' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          tagName: v__VERSION__
+          releaseName: 'Haven v__VERSION__ — Windows'
+          releaseBody: |
+            Instalador Windows x64 do Haven.
+
+            - Instalação simples por usuário (NSIS)
+            - Atualizações futuras verificadas pelo próprio aplicativo
+            - Redução de ruído DTLN executada localmente
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          releaseAssetNamePattern: 'Haven_Windows_x64[setup].[ext]'
+          args: --target x86_64-pc-windows-msvc --bundles nsis

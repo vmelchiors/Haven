@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useMediaStore } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { isTauri } from '@tauri-apps/api/core';
 
 export function usePushToTalk() {
   const isPttEnabled = useSettingsStore((s) => s.isPttEnabled);
@@ -31,11 +32,41 @@ export function usePushToTalk() {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
+    let disposed = false;
+    let nativeShortcut: string | null = null;
+    if (isTauri()) {
+      nativeShortcut = toTauriShortcut(pttKey);
+      import('@tauri-apps/plugin-global-shortcut').then(async ({ register }) => {
+        if (disposed || !nativeShortcut) return;
+        await register(nativeShortcut, (event) => {
+          setPushToTalkActive(event.state === 'Pressed');
+        });
+      }).catch((error) => {
+        console.warn('[PTT] Atalho global indisponível; usando somente a janela ativa:', error);
+      });
+    }
+
     return () => {
+      disposed = true;
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      setPushToTalkActive(false);
+      if (nativeShortcut) {
+        void import('@tauri-apps/plugin-global-shortcut')
+          .then(({ unregister }) => unregister(nativeShortcut!))
+          .catch(() => undefined);
+      }
     };
   }, [isPttEnabled, pttKey, setPushToTalkActive]);
+}
+
+function toTauriShortcut(binding: string): string {
+  return binding
+    .replace(/^Control(?=\+|$)/i, 'Ctrl')
+    .replace(/\+Key([A-Z])$/i, '+$1')
+    .replace(/^Key([A-Z])$/i, '$1')
+    .replace(/\+Digit([0-9])$/i, '+$1')
+    .replace(/^Digit([0-9])$/i, '$1');
 }
 
 function matchesKey(e: KeyboardEvent, keyBinding: string): boolean {

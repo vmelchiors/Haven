@@ -5,6 +5,7 @@ import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
 import { useCommunityStore } from '../../stores/communityStore';
+import { assetUrl } from '../../lib/runtimeConfig';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 export const EditCommunityModal: React.FC = () => {
@@ -145,7 +146,7 @@ export const EditCommunityModal: React.FC = () => {
                   <img src={iconPreview} alt="Icon" className="w-full h-full object-cover" />
                 ) : (
                   <Avatar
-                    src={selectedCommunity.icon_url}
+                    src={assetUrl(selectedCommunity.icon_url)}
                     name={selectedCommunity.name}
                     size="md"
                     className="w-full h-full rounded-none"

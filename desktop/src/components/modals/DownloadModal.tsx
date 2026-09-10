@@ -29,7 +29,8 @@ export const DownloadModal: React.FC = () => {
     }
   }, []);
 
-  const releaseBaseUrl = 'https://github.com/vinicius/Haven/releases/latest';
+  const releaseBaseUrl = import.meta.env.VITE_GITHUB_RELEASE_URL
+    ?? 'https://github.com/vmelchiors/Haven/releases/latest';
 
   const downloadLinks: Record<Platform, { name: string; ext: string; badge: string; file: string; url: string; size: string }[]> = {
     windows: [
@@ -37,55 +38,13 @@ export const DownloadModal: React.FC = () => {
         name: 'Instalador Executável (Recomendado)',
         ext: '.exe',
         badge: 'EXE',
-        file: 'Haven_1.0.0_x64-setup.exe',
-        url: `${releaseBaseUrl}/download/Haven_1.0.0_x64-setup.exe`,
-        size: '~14.8 MB',
-      },
-      {
-        name: 'Pacote MSI Corporativo',
-        ext: '.msi',
-        badge: 'MSI',
-        file: 'Haven_1.0.0_x64_en-US.msi',
-        url: `${releaseBaseUrl}/download/Haven_1.0.0_x64_en-US.msi`,
-        size: '~15.2 MB',
+        file: 'Haven_Windows_x64-setup.exe',
+        url: `${releaseBaseUrl}/download/Haven_Windows_x64-setup.exe`,
+        size: '~20 MB',
       },
     ],
-    macos: [
-      {
-        name: 'Apple Silicon (M1 / M2 / M3 / M4)',
-        ext: '.dmg',
-        badge: 'DMG',
-        file: 'Haven_1.0.0_aarch64.dmg',
-        url: `${releaseBaseUrl}/download/Haven_1.0.0_aarch64.dmg`,
-        size: '~12.4 MB',
-      },
-      {
-        name: 'Intel Mac (x64)',
-        ext: '.dmg',
-        badge: 'DMG',
-        file: 'Haven_1.0.0_x64.dmg',
-        url: `${releaseBaseUrl}/download/Haven_1.0.0_x64.dmg`,
-        size: '~14.1 MB',
-      },
-    ],
-    linux: [
-      {
-        name: 'Pacote Debian / Ubuntu',
-        ext: '.deb',
-        badge: 'DEB',
-        file: 'haven_1.0.0_amd64.deb',
-        url: `${releaseBaseUrl}/download/haven_1.0.0_amd64.deb`,
-        size: '~13.6 MB',
-      },
-      {
-        name: 'AppImage Universal',
-        ext: '.AppImage',
-        badge: 'APP',
-        file: 'Haven_1.0.0_amd64.AppImage',
-        url: `${releaseBaseUrl}/download/Haven_1.0.0_amd64.AppImage`,
-        size: '~16.0 MB',
-      },
-    ],
+    macos: [],
+    linux: [],
   };
 
   const platforms: { id: Platform; label: string; icon: React.ReactNode }[] = [
@@ -110,7 +69,7 @@ export const DownloadModal: React.FC = () => {
               <span>Experiência Desktop Nativa com Tauri v2</span>
             </div>
             <span className="text-[10px] bg-emerald-950/60 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-800/40 font-medium">
-              v1.0.0 Estável
+              Versão mais recente
             </span>
           </div>
 
@@ -205,13 +164,18 @@ export const DownloadModal: React.FC = () => {
               </a>
             </div>
           ))}
+          {downloadLinks[selectedOS].length === 0 && (
+            <div className="rounded-xl border border-haven-border bg-haven-darker/90 p-4 text-center text-xs text-slate-400">
+              Esta plataforma ainda está em desenvolvimento. No momento, o aplicativo nativo está disponível para Windows x64.
+            </div>
+          )}
         </div>
 
         {/* Footer GitHub Link */}
         <div className="flex items-center justify-between pt-2 border-t border-haven-border/60 text-xs text-slate-400">
           <span>Código aberto & Livre de Telemetria</span>
           <a
-            href="https://github.com/vinicius/Haven/releases"
+            href="https://github.com/vmelchiors/Haven/releases"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-haven-cyan hover:underline text-[11px]"

@@ -4,6 +4,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useMediaStore } from '../stores/mediaStore';
 import { useCommunityStore } from '../stores/communityStore';
 import { WSMessage, Message, VoiceChannelUser } from '../types';
+import { websocketUrl } from '../lib/runtimeConfig';
 
 let socket: WebSocket | null = null;
 let pingInterval: number | null = null;
@@ -47,9 +48,7 @@ function setupWebSocket(accessToken: string) {
   isConnecting = true;
 
   try {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws?token=${encodeURIComponent(accessToken)}`;
+    const wsUrl = websocketUrl(`/ws?token=${encodeURIComponent(accessToken)}`);
 
     socket = new WebSocket(wsUrl);
 

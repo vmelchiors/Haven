@@ -8,6 +8,8 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useLiveKit } from './hooks/useLiveKit';
 import { usePushToTalk } from './hooks/usePushToTalk';
 import { useCallFeedback } from './hooks/useCallFeedback';
+import { useAutoUpdater } from './hooks/useAutoUpdater';
+import { useDesktopPip } from './hooks/useDesktopPip';
 
 // Layout
 import { ServerSidebar } from './components/layout/ServerSidebar';
@@ -19,6 +21,7 @@ import { AuthView } from './components/auth/AuthView';
 import { ChatArea } from './components/chat/ChatArea';
 import { VoiceRoom } from './components/media/VoiceRoom';
 import { VoiceChannelPreview } from './components/media/VoiceChannelPreview';
+import { DesktopPip } from './components/media/DesktopPip';
 
 // Modals
 import { ToSModal } from './components/modals/ToSModal';
@@ -52,9 +55,19 @@ export const App: React.FC = () => {
   // Initialize Global Push-to-Talk listener
   usePushToTalk();
   useCallFeedback();
+  useAutoUpdater();
+  const desktopPip = useDesktopPip();
 
   useEffect(() => {
     useAuthStore.getState().checkAuth();
+  }, []);
+
+  useEffect(() => {
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices?.addEventListener) return;
+    const refreshDevices = () => void useSettingsStore.getState().loadAudioDevices();
+    mediaDevices.addEventListener('devicechange', refreshDevices);
+    return () => mediaDevices.removeEventListener('devicechange', refreshDevices);
   }, []);
 
   useEffect(() => {
@@ -83,6 +96,16 @@ export const App: React.FC = () => {
         <AuthView />
         <DonationModal />
       </>
+    );
+  }
+
+  if (desktopPip.isDesktopPip && desktopPip.pipParticipant) {
+    return (
+      <DesktopPip
+        participant={desktopPip.pipParticipant}
+        onRestore={() => void desktopPip.restore()}
+        onStartDragging={() => void desktopPip.startDragging()}
+      />
     );
   }
 

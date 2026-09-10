@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { assetUrl } from '../../lib/runtimeConfig';
 
 interface AvatarProps {
   src?: string;
@@ -85,7 +86,7 @@ export const Avatar: React.FC<AvatarProps> = ({
         )}
       >
         {src && !imageFailed ? (
-          <img src={src} alt={name} className="w-full h-full object-cover" onError={() => setImageFailed(true)} />
+          <img src={assetUrl(src)} alt={name} className="w-full h-full object-cover" onError={() => setImageFailed(true)} />
         ) : (
           <div className={twMerge(clsx('w-full h-full flex items-center justify-center font-bold tracking-tight', palette))}>
             {getInitials(name)}
